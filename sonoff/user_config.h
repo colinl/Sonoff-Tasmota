@@ -34,18 +34,18 @@
 #define SAVE_STATE             1                 // [SetOption0] Save changed power state to Flash (0 = disable, 1 = enable)
 
 // -- Wifi ----------------------------------------
-#define WIFI_IP_ADDRESS        "0.0.0.0"         // [IpAddress1] Set to 0.0.0.0 for using DHCP or IP address
-#define WIFI_GATEWAY           "192.168.2.254"   // {IpAddress2] If not using DHCP set Gateway IP address
+#define WIFI_IP_ADDRESS        "192.168.49.77"         // [IpAddress1] Set to 0.0.0.0 for using DHCP or IP address
+#define WIFI_GATEWAY           "192.168.49.1"   // {IpAddress2] If not using DHCP set Gateway IP address
 #define WIFI_SUBNETMASK        "255.255.255.0"   // [IpAddress3] If not using DHCP set Network mask
-#define WIFI_DNS               "192.168.2.27"    // [IpAddress4] If not using DHCP set DNS IP address (might be equal to WIFI_GATEWAY)
+#define WIFI_DNS               "192.168.49.1"    // [IpAddress4] If not using DHCP set DNS IP address (might be equal to WIFI_GATEWAY)
 
-#define STA_SSID1              "indebuurt1"      // [Ssid1] Wifi SSID
-#define STA_PASS1              "VnsqrtnrsddbrN"  // [Password1] Wifi password
-#define STA_SSID2              "indebuurt2"      // [Ssid2] Optional alternate AP Wifi SSID
-#define STA_PASS2              "VnsqrtnrsddbrN"  // [Password2] Optional alternate AP Wifi password
+#define STA_SSID1              "RedKite"      // [Ssid1] Wifi SSID
+#define STA_PASS1              "ladycaroline"  // [Password1] Wifi password
+#define STA_SSID2              ""      // [Ssid2] Optional alternate AP Wifi SSID
+#define STA_PASS2              ""  // [Password2] Optional alternate AP Wifi password
 #define WIFI_CONFIG_TOOL       WIFI_WPSCONFIG    // [WifiConfig] Default tool if wifi fails to connect
                                                  //   (WIFI_RESTART, WIFI_SMARTCONFIG, WIFI_MANAGER, WIFI_WPSCONFIG, WIFI_RETRY)
-                                                 
+
 // -- Syslog --------------------------------------
 #define SYS_LOG_HOST           "domus1"          // [LogHost] (Linux) syslog host
 #define SYS_LOG_PORT           514               // [LogPort] default syslog UDP port
@@ -68,10 +68,10 @@
   #define MQTT_USER            "cloudmqttuser"      // [MqttUser] Mandatory user
   #define MQTT_PASS            "cloudmqttpassword"  // [MqttPassword] Mandatory password
 #else
-  #define MQTT_HOST            "domus1"          // [MqttHost]
+  #define MQTT_HOST            "192.168.49.83"          // [MqttHost]
   #define MQTT_PORT            1883              // [MqttPort] MQTT port (10123 on CloudMQTT)
-  #define MQTT_USER            "DVES_USER"       // [MqttUser] Optional user
-  #define MQTT_PASS            "DVES_PASS"       // [MqttPassword] Optional password
+  #define MQTT_USER            ""       // [MqttUser] Optional user
+  #define MQTT_PASS            ""       // [MqttPassword] Optional password
 #endif
 
 #define MQTT_BUTTON_RETAIN     0                 // [ButtonRetain] Button may send retain flag (0 = off, 1 = on)
@@ -98,7 +98,7 @@
 #define MQTT_CLIENT_ID         "DVES_%06X"       // [MqttClient] Also fall back topic using Chip Id = last 6 characters of MAC address
 
 // -- MQTT - Telemetry ----------------------------
-#define TELE_PERIOD            300               // [TelePeriod] Telemetry (0 = disable, 10 - 3600 seconds)
+#define TELE_PERIOD            10               // [TelePeriod] Telemetry (0 = disable, 10 - 3600 seconds)
 
 // -- MQTT - Domoticz -----------------------------
 #define USE_DOMOTICZ                             // Enable Domoticz (+7k code, +0.3k mem) - Disable by //
@@ -172,7 +172,7 @@
 
 /*********************************************************************************************\
  * Compile a minimal version if upgrade memory gets tight ONLY TO BE USED FOR UPGRADE STEP 1!
- *   To be used as step 1 during upgrade. 
+ *   To be used as step 1 during upgrade.
  *   Step 2 is re-compile with option BE_MINIMAL commented out.
  *   !!! Needed for next release of Arduino/ESP8266 (+22k code, +2k mem) !!!
 \*********************************************************************************************/
@@ -190,4 +190,3 @@
 #if (ARDUINO < 10610)
   #error "This software is supported with Arduino IDE starting from 1.6.10 and ESP8266 Release 2.3.0"
 #endif
-
