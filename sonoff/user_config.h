@@ -98,7 +98,7 @@
 
 // -- MQTT topics ---------------------------------
 //#define MQTT_FULLTOPIC         "tasmota/bedroom/%topic%/%prefix%/" // Up to max 80 characers
-#define MQTT_FULLTOPIC         "tydwr/%prefix%/%topic%/" // [FullTopic] Subscribe and Publish full topic name - Legacy topic
+#define MQTT_FULLTOPIC         "tydwr/greenhouse/%topic%/%prefix%/" // [FullTopic] Subscribe and Publish full topic name - Legacy topic
 
 // %prefix% token options
 #define SUB_PREFIX             "cmnd"            // [Prefix1] Sonoff devices subscribe to %prefix%/%topic% being SUB_PREFIX/MQTT_TOPIC and SUB_PREFIX/MQTT_GRPTOPIC
@@ -106,7 +106,7 @@
 #define PUB_PREFIX2            "tele"            // [Prefix3] Sonoff devices publish telemetry data to %prefix%/%topic% being PUB_PREFIX2/MQTT_TOPIC/UPTIME, POWER and TIME
                                                  //   May be named the same as PUB_PREFIX
 // %topic% token options (also ButtonTopic and SwitchTopic)
-#define MQTT_TOPIC             "s002"            // [Topic] (unique) MQTT device topic
+#define MQTT_TOPIC             "heater"            // [Topic] (unique) MQTT device topic
 #define MQTT_GRPTOPIC          "sonoffs"         // [GroupTopic] MQTT Group topic
 #define MQTT_CLIENT_ID         "DVES_%06X"       // [MqttClient] Also fall back topic using Chip Id = last 6 characters of MAC address
 
