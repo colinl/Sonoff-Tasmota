@@ -229,4 +229,6 @@
   #error "Select either USE_MQTT_TLS or USE_WEBSERVER as there is just not enough memory to play with"
 #endif
 
-#endif  // _USER_CONFIG_H_
+#if (ARDUINO < 10610)
+  #error "This software is supported with Arduino IDE starting from 1.6.10 and ESP8266 Release 2.3.0"
+#endif
