@@ -1,5 +1,5 @@
 /*
-  xdrv_08_user_application.ino - user application support for Sonoff-Tasmota
+  xdrv_08_user_application.ino - Timeprop support for Sonoff-Tasmota
   Copyright (C) 2018 Thomas Herrmann
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,14 +22,14 @@
 
 #ifdef USE_TIMEPROP
 
-enum UserApplicatonCommands { CMND_TIMEPROP_SETPOWER, CMND_TIMEPROP_CMD_B };
-const char kUserApplicationCommands[] PROGMEM = D_CMND_TIMEPROP_SETPOWER "|" D_CMND_TIMEPROP_CMD_B;
+enum TimepropCommands { CMND_TIMEPROP_SETPOWER, CMND_TIMEPROP_CMD_B };
+const char kTimepropCommands[] PROGMEM = D_CMND_TIMEPROP_SETPOWER "|" D_CMND_TIMEPROP_CMD_B;
 
 static double timeprop_power = 0.0;
 
 void Timeprop_Init()
 {
-  snprintf_P(log_data, sizeof(log_data), "User Application Init");
+  snprintf_P(log_data, sizeof(log_data), "Timeprop Init");
   AddLog(LOG_LEVEL_INFO);
 }
 
@@ -38,14 +38,14 @@ void Timeprop_Every_50ms() {
   // CDL edited later so this is not called
   counter_50ms++;
   if (counter_50ms % 200 == 0) {
-    snprintf_P(log_data, sizeof(log_data), "200 calls of User Application Every 50ms");
+    snprintf_P(log_data, sizeof(log_data), "200 calls of Timeprop Every 50ms");
     AddLog(LOG_LEVEL_INFO);
    }
 }
 
 void Timeprop_Every_Second() {
   ExecuteCommandPower(1, timeprop_power >= 0.5 ? 1 : 0);
-  //snprintf_P(log_data, sizeof(log_data), "User Application Every Second");
+  //snprintf_P(log_data, sizeof(log_data), "Timeprop Every Second");
   //AddLog(LOG_LEVEL_INFO);
 }
 
@@ -76,13 +76,13 @@ boolean Timeprop_Command()
     AddLog(LOG_LEVEL_INFO);
 
   if (0 == strncasecmp_P(XdrvMailbox.topic, PSTR(D_CMND_TIMEPROP), ua_prefix_len)) {
-    // command starts with UserApplication
-    int command_code = GetCommandCode(command, sizeof(command), XdrvMailbox.topic + ua_prefix_len, kUserApplicationCommands);
-    snprintf_P(log_data, sizeof(log_data), "User Application Command found: %d", command_code);
+    // command starts with Timeprop
+    int command_code = GetCommandCode(command, sizeof(command), XdrvMailbox.topic + ua_prefix_len, kTimepropCommands);
+    snprintf_P(log_data, sizeof(log_data), "Timeprop Command found: %d", command_code);
 
       AddLog(LOG_LEVEL_INFO);
     if (CMND_TIMEPROP_SETPOWER == command_code) {
-      snprintf_P(log_data, sizeof(log_data), "User application command timeprop_setpower called: "
+      snprintf_P(log_data, sizeof(log_data), "Timeprop command timeprop_setpower called: "
         "index: %d data_len: %d payload: %d topic: %s data: %s\n",
 	      XdrvMailbox.index,
 	      XdrvMailbox.data_len,
@@ -97,7 +97,7 @@ boolean Timeprop_Command()
       // if (XdrvMailbox.payload >= 0) {
       //   Settings.domoticz_key_idx[XdrvMailbox.index -1] = XdrvMailbox.payload;
       // }
-      snprintf_P(log_data, sizeof(log_data), "User Application Command B called.");
+      snprintf_P(log_data, sizeof(log_data), "Timeprop Command B called.");
       AddLog(LOG_LEVEL_INFO);
       // todo:
       // snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_DOMOTICZ_COMMAND_INDEX_LVALUE, command, XdrvMailbox.index,
@@ -114,13 +114,13 @@ boolean Timeprop_Command()
 
 void Timeprop_Show_Sensor() {
   // todo: find out what this is used for
-  snprintf_P(log_data, sizeof(log_data), "User Application Show Sensor");
+  snprintf_P(log_data, sizeof(log_data), "Timeprop Show Sensor");
   AddLog(LOG_LEVEL_INFO);
 }
 
 void Timeprop_Set_Power() {
   // todo: find out what this is used for
-  snprintf_P(log_data, sizeof(log_data), "User Application Set Power");
+  snprintf_P(log_data, sizeof(log_data), "Timeprop Set Power");
   AddLog(LOG_LEVEL_INFO);
 }
 
@@ -128,9 +128,9 @@ void Timeprop_Set_Power() {
  * Interface
 \*********************************************************************************************/
 
-#define XDRV_98
+#define XDRV_91
 
-boolean Xdrv98(byte function)
+boolean Xdrv91(byte function)
 {
   boolean result = false;
 
