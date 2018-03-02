@@ -35,6 +35,12 @@
 #endif
 #define CFG_HOLDER           0x18030201   // yymmddnn  change this to force changes to be used immediately
 
+#define USER_APPLICATION 
+
+#define D_CMND_USER_APPLICATION "UserApp"
+#define D_CMND_USER_APPLICATION_CMD_A "CmndA"
+#define D_CMND_USER_APPLICATION_CMD_B "CmndB"
+
 #ifdef WIFI_IP_ADDRESS
 #undef WIFI_IP_ADDRESS
 #endif
