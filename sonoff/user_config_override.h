@@ -33,12 +33,12 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x18030201   // yymmddnn  change this to force changes to be used immediately
+#define CFG_HOLDER           0x18030202   // yymmddnn  change this to force changes to be used immediately
 
-#define USER_APPLICATION 
+#define USER_APPLICATION
 
-#define D_CMND_USER_APPLICATION "UserApp"
-#define D_CMND_USER_APPLICATION_CMD_A "CmndA"
+#define D_CMND_USER_APPLICATION "timeprop_"
+#define D_CMND_USER_APPLICATION_CMD_A "setpower"    // payload is power 0:1
 #define D_CMND_USER_APPLICATION_CMD_B "CmndB"
 
 #ifdef WIFI_IP_ADDRESS
@@ -109,7 +109,7 @@
 #ifdef TELE_PERIOD
 #undef TELE_PERIOD
 #endif
-#define TELE_PERIOD            15               // [TelePeriod] Telemetry (0 = disable, 10 - 3600 seconds)
+#define TELE_PERIOD            60               // [TelePeriod] Telemetry (0 = disable, 10 - 3600 seconds)
 
 #ifdef FRIENDLY_NAME
 #undef FRIENDLY_NAME

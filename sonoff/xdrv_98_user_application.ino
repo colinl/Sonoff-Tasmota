@@ -25,6 +25,8 @@
 enum UserApplicatonCommands { CMND_USER_APPLICATION_CMD_A, CMND_USER_APPLICATION_CMD_B };
 const char kUserApplicationCommands[] PROGMEM = D_CMND_USER_APPLICATION_CMD_A "|" D_CMND_USER_APPLICATION_CMD_B;
 
+static double timeprop_power = 0.0;
+
 void User_Application_Init()
 {
   snprintf_P(log_data, sizeof(log_data), "User Application Init");
@@ -33,6 +35,7 @@ void User_Application_Init()
 
 int counter_50ms = 0;
 void User_Application_Every_50ms() {
+  // CDL edited later so this is not called
   counter_50ms++;
   if (counter_50ms % 200 == 0) {
     snprintf_P(log_data, sizeof(log_data), "200 calls of User Application Every 50ms");
@@ -41,8 +44,9 @@ void User_Application_Every_50ms() {
 }
 
 void User_Application_Every_Second() {
-  snprintf_P(log_data, sizeof(log_data), "User Application Every Second");
-  AddLog(LOG_LEVEL_INFO);
+  ExecuteCommandPower(1, timeprop_power >= 0.5 ? 1 : 0);
+  //snprintf_P(log_data, sizeof(log_data), "User Application Every Second");
+  //AddLog(LOG_LEVEL_INFO);
 }
 
 /* struct XDRVMAILBOX { */
@@ -54,17 +58,31 @@ void User_Application_Every_Second() {
 /*   char         *data; */
 /* } XdrvMailbox; */
 
+// To get here post with topic cmnd/timeprop_setpower etc
 boolean User_Application_Command()
 {
   char command [CMDSZ];
   boolean serviced = true;
   uint8_t ua_prefix_len = strlen(D_CMND_USER_APPLICATION); // to detect prefix of command
 
+  snprintf_P(log_data, sizeof(log_data), "Command called: "
+    "index: %d data_len: %d payload: %d topic: %s data: %s\n",
+    XdrvMailbox.index,
+    XdrvMailbox.data_len,
+    XdrvMailbox.payload,
+    (XdrvMailbox.payload >= 0 ? XdrvMailbox.topic : ""),
+    (XdrvMailbox.data_len >= 0 ? XdrvMailbox.data : ""));
+
+    AddLog(LOG_LEVEL_INFO);
+
   if (0 == strncasecmp_P(XdrvMailbox.topic, PSTR(D_CMND_USER_APPLICATION), ua_prefix_len)) {
     // command starts with UserApplication
     int command_code = GetCommandCode(command, sizeof(command), XdrvMailbox.topic + ua_prefix_len, kUserApplicationCommands);
+    snprintf_P(log_data, sizeof(log_data), "User Application Command found: %d", command_code);
+
+      AddLog(LOG_LEVEL_INFO);
     if (CMND_USER_APPLICATION_CMD_A == command_code) {
-      snprintf_P(log_data, sizeof(log_data), "User Application Command A called: "
+      snprintf_P(log_data, sizeof(log_data), "User application command timeprop_setpower called: "
         "index: %d data_len: %d payload: %d topic: %s data: %s\n",
 	      XdrvMailbox.index,
 	      XdrvMailbox.data_len,
@@ -73,6 +91,7 @@ boolean User_Application_Command()
 	      (XdrvMailbox.data_len >= 0 ? XdrvMailbox.data : ""));
 
         AddLog(LOG_LEVEL_INFO);
+        timeprop_power = atof(XdrvMailbox.data);
     }
     else if ((CMND_USER_APPLICATION_CMD_B == command_code) && (XdrvMailbox.index > 0) && (XdrvMailbox.index <= MAX_DOMOTICZ_IDX)) {
       // if (XdrvMailbox.payload >= 0) {
@@ -120,7 +139,7 @@ boolean Xdrv98(byte function)
     User_Application_Init();
     break;
   case FUNC_EVERY_50_MSECOND:
-    User_Application_Every_50ms();
+    // User_Application_Every_50ms();       CDL Don't need this
     break;
   case FUNC_EVERY_SECOND:
     User_Application_Every_Second();
