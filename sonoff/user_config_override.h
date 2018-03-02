@@ -35,11 +35,11 @@
 #endif
 #define CFG_HOLDER           0x18030202   // yymmddnn  change this to force changes to be used immediately
 
-#define USER_APPLICATION
+#define USE_TIMEPROP    //  include the timeprop feature
 
-#define D_CMND_USER_APPLICATION "timeprop_"
-#define D_CMND_USER_APPLICATION_CMD_A "setpower"    // payload is power 0:1
-#define D_CMND_USER_APPLICATION_CMD_B "CmndB"
+#define D_CMND_TIMEPROP "timeprop_"
+#define D_CMND_TIMEPROP_SETPOWER "setpower"    // payload is power 0:1
+#define D_CMND_TIMEPROP_CMD_B "CmndB"
 
 #ifdef WIFI_IP_ADDRESS
 #undef WIFI_IP_ADDRESS

@@ -20,21 +20,21 @@
    Local logic may also be used for critical control tasks that must be running if
    the automation fails */
 
-#ifdef USER_APPLICATION
+#ifdef USE_TIMEPROP
 
-enum UserApplicatonCommands { CMND_USER_APPLICATION_CMD_A, CMND_USER_APPLICATION_CMD_B };
-const char kUserApplicationCommands[] PROGMEM = D_CMND_USER_APPLICATION_CMD_A "|" D_CMND_USER_APPLICATION_CMD_B;
+enum UserApplicatonCommands { CMND_TIMEPROP_SETPOWER, CMND_TIMEPROP_CMD_B };
+const char kUserApplicationCommands[] PROGMEM = D_CMND_TIMEPROP_SETPOWER "|" D_CMND_TIMEPROP_CMD_B;
 
 static double timeprop_power = 0.0;
 
-void User_Application_Init()
+void Timeprop_Init()
 {
   snprintf_P(log_data, sizeof(log_data), "User Application Init");
   AddLog(LOG_LEVEL_INFO);
 }
 
 int counter_50ms = 0;
-void User_Application_Every_50ms() {
+void Timeprop_Every_50ms() {
   // CDL edited later so this is not called
   counter_50ms++;
   if (counter_50ms % 200 == 0) {
@@ -43,7 +43,7 @@ void User_Application_Every_50ms() {
    }
 }
 
-void User_Application_Every_Second() {
+void Timeprop_Every_Second() {
   ExecuteCommandPower(1, timeprop_power >= 0.5 ? 1 : 0);
   //snprintf_P(log_data, sizeof(log_data), "User Application Every Second");
   //AddLog(LOG_LEVEL_INFO);
@@ -59,11 +59,11 @@ void User_Application_Every_Second() {
 /* } XdrvMailbox; */
 
 // To get here post with topic cmnd/timeprop_setpower etc
-boolean User_Application_Command()
+boolean Timeprop_Command()
 {
   char command [CMDSZ];
   boolean serviced = true;
-  uint8_t ua_prefix_len = strlen(D_CMND_USER_APPLICATION); // to detect prefix of command
+  uint8_t ua_prefix_len = strlen(D_CMND_TIMEPROP); // to detect prefix of command
 
   snprintf_P(log_data, sizeof(log_data), "Command called: "
     "index: %d data_len: %d payload: %d topic: %s data: %s\n",
@@ -75,13 +75,13 @@ boolean User_Application_Command()
 
     AddLog(LOG_LEVEL_INFO);
 
-  if (0 == strncasecmp_P(XdrvMailbox.topic, PSTR(D_CMND_USER_APPLICATION), ua_prefix_len)) {
+  if (0 == strncasecmp_P(XdrvMailbox.topic, PSTR(D_CMND_TIMEPROP), ua_prefix_len)) {
     // command starts with UserApplication
     int command_code = GetCommandCode(command, sizeof(command), XdrvMailbox.topic + ua_prefix_len, kUserApplicationCommands);
     snprintf_P(log_data, sizeof(log_data), "User Application Command found: %d", command_code);
 
       AddLog(LOG_LEVEL_INFO);
-    if (CMND_USER_APPLICATION_CMD_A == command_code) {
+    if (CMND_TIMEPROP_SETPOWER == command_code) {
       snprintf_P(log_data, sizeof(log_data), "User application command timeprop_setpower called: "
         "index: %d data_len: %d payload: %d topic: %s data: %s\n",
 	      XdrvMailbox.index,
@@ -93,7 +93,7 @@ boolean User_Application_Command()
         AddLog(LOG_LEVEL_INFO);
         timeprop_power = atof(XdrvMailbox.data);
     }
-    else if ((CMND_USER_APPLICATION_CMD_B == command_code) && (XdrvMailbox.index > 0) && (XdrvMailbox.index <= MAX_DOMOTICZ_IDX)) {
+    else if ((CMND_TIMEPROP_CMD_B == command_code) && (XdrvMailbox.index > 0) && (XdrvMailbox.index <= MAX_DOMOTICZ_IDX)) {
       // if (XdrvMailbox.payload >= 0) {
       //   Settings.domoticz_key_idx[XdrvMailbox.index -1] = XdrvMailbox.payload;
       // }
@@ -112,13 +112,13 @@ boolean User_Application_Command()
   return serviced;
 }
 
-void User_Application_Show_Sensor() {
+void Timeprop_Show_Sensor() {
   // todo: find out what this is used for
   snprintf_P(log_data, sizeof(log_data), "User Application Show Sensor");
   AddLog(LOG_LEVEL_INFO);
 }
 
-void User_Application_Set_Power() {
+void Timeprop_Set_Power() {
   // todo: find out what this is used for
   snprintf_P(log_data, sizeof(log_data), "User Application Set Power");
   AddLog(LOG_LEVEL_INFO);
@@ -136,22 +136,22 @@ boolean Xdrv98(byte function)
 
   switch (function) {
   case FUNC_INIT:
-    User_Application_Init();
+    Timeprop_Init();
     break;
   case FUNC_EVERY_50_MSECOND:
-    // User_Application_Every_50ms();       CDL Don't need this
+    // Timeprop_Every_50ms();       CDL Don't need this
     break;
   case FUNC_EVERY_SECOND:
-    User_Application_Every_Second();
+    Timeprop_Every_Second();
     break;
   case FUNC_COMMAND:
-    result = User_Application_Command();
+    result = Timeprop_Command();
     break;
   case FUNC_SHOW_SENSOR:
-    User_Application_Show_Sensor();
+    Timeprop_Show_Sensor();
     break;
   case FUNC_SET_POWER:
-    User_Application_Set_Power();
+    Timeprop_Set_Power();
     break;
     /* FUNC_MQTT_SUBSCRIBE */
     /*   FUNC_MQTT_INIT */
@@ -161,4 +161,4 @@ boolean Xdrv98(byte function)
   return result;
 }
 
-#endif // USER_APPLICATION
+#endif // USE_TIMEPROP
