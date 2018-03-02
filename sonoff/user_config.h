@@ -49,12 +49,12 @@
 #define SAVE_STATE             1                 // [SetOption0] Save changed power state to Flash (0 = disable, 1 = enable)
 
 // -- Wifi ----------------------------------------
-#define WIFI_IP_ADDRESS        "192.168.49.75"         // [IpAddress1] Set to 0.0.0.0 for using DHCP or IP address
-#define WIFI_GATEWAY           "192.168.49.1"   // [IpAddress2] If not using DHCP set Gateway IP address
+#define WIFI_IP_ADDRESS        "0.0.0.0"         // [IpAddress1] Set to 0.0.0.0 for using DHCP or IP address
+#define WIFI_GATEWAY           "192.168.2.254"   // [IpAddress2] If not using DHCP set Gateway IP address
 #define WIFI_SUBNETMASK        "255.255.255.0"   // [IpAddress3] If not using DHCP set Network mask
-#define WIFI_DNS               "192.168.49.1"    // [IpAddress4] If not using DHCP set DNS IP address (might be equal to WIFI_GATEWAY)
+#define WIFI_DNS               "192.168.2.27"    // [IpAddress4] If not using DHCP set DNS IP address (might be equal to WIFI_GATEWAY)
 
-#define STA_SSID1              "RedKite"                // [Ssid1] Wifi SSID
+#define STA_SSID1              ""                // [Ssid1] Wifi SSID
 #define STA_PASS1              ""                // [Password1] Wifi password
 #define STA_SSID2              ""                // [Ssid2] Optional alternate AP Wifi SSID
 #define STA_PASS2              ""                // [Password2] Optional alternate AP Wifi password
@@ -84,24 +84,24 @@
   #define MQTT_USER            "cloudmqttuser"      // [MqttUser] Mandatory user
   #define MQTT_PASS            "cloudmqttpassword"  // [MqttPassword] Mandatory password
 #else
-  #define MQTT_HOST            "192.168.49.83"                // owl2
+  #define MQTT_HOST            ""                // [MqttHost]
   #define MQTT_PORT            1883              // [MqttPort] MQTT port (10123 on CloudMQTT)
-  #define MQTT_USER            ""       // [MqttUser] Optional user
-  #define MQTT_PASS            ""       // [MqttPassword] Optional password
+  #define MQTT_USER            "DVES_USER"       // [MqttUser] Optional user
+  #define MQTT_PASS            "DVES_PASS"       // [MqttPassword] Optional password
 #endif
 
 #define MQTT_BUTTON_RETAIN     0                 // [ButtonRetain] Button may send retain flag (0 = off, 1 = on)
 #define MQTT_POWER_RETAIN      0                 // [PowerRetain] Power status message may send retain flag (0 = off, 1 = on)
 #define MQTT_SWITCH_RETAIN     0                 // [SwitchRetain] Switch may send retain flag (0 = off, 1 = on)
 
-#define MQTT_STATUS_OFF        "Off"             // [StateText1] Command or Status result when turned off (needs to be a string like "0" or "Off")
-#define MQTT_STATUS_ON         "On"              // [StateText2] Command or Status result when turned on (needs to be a string like "1" or "On")
+#define MQTT_STATUS_OFF        "OFF"             // [StateText1] Command or Status result when turned off (needs to be a string like "0" or "Off")
+#define MQTT_STATUS_ON         "ON"              // [StateText2] Command or Status result when turned on (needs to be a string like "1" or "On")
 #define MQTT_CMND_TOGGLE       "TOGGLE"          // [StateText3] Command to send when toggling (needs to be a string like "2" or "Toggle")
 #define MQTT_CMND_HOLD         "HOLD"            // [StateText4] Command to send when button is kept down for over KEY_HOLD_TIME * 0.1 seconds (needs to be a string like "HOLD")
 
 // -- MQTT topics ---------------------------------
 //#define MQTT_FULLTOPIC         "tasmota/bedroom/%topic%/%prefix%/" // Up to max 80 characers
-#define MQTT_FULLTOPIC         "tydwr/temp/%topic%/%prefix%/" // [FullTopic] Subscribe and Publish full topic name - Legacy topic
+#define MQTT_FULLTOPIC         "%prefix%/%topic%/" // [FullTopic] Subscribe and Publish full topic name - Legacy topic
 
 // %prefix% token options
 #define SUB_PREFIX             "cmnd"            // [Prefix1] Sonoff devices subscribe to %prefix%/%topic% being SUB_PREFIX/MQTT_TOPIC and SUB_PREFIX/MQTT_GRPTOPIC
@@ -109,21 +109,21 @@
 #define PUB_PREFIX2            "tele"            // [Prefix3] Sonoff devices publish telemetry data to %prefix%/%topic% being PUB_PREFIX2/MQTT_TOPIC/UPTIME, POWER and TIME
                                                  //   May be named the same as PUB_PREFIX
 // %topic% token options (also ButtonTopic and SwitchTopic)
-#define MQTT_TOPIC             "s002"           // [Topic] (unique) MQTT device topic
+#define MQTT_TOPIC             PROJECT           // [Topic] (unique) MQTT device topic
 #define MQTT_GRPTOPIC          "sonoffs"         // [GroupTopic] MQTT Group topic
 #define MQTT_CLIENT_ID         "DVES_%06X"       // [MqttClient] Also fall back topic using Chip Id = last 6 characters of MAC address
 
 // -- MQTT - Telemetry ----------------------------
-#define TELE_PERIOD            10               // [TelePeriod] Telemetry (0 = disable, 10 - 3600 seconds)
+#define TELE_PERIOD            300               // [TelePeriod] Telemetry (0 = disable, 10 - 3600 seconds)
 
 // -- MQTT - Domoticz -----------------------------
-//#define USE_DOMOTICZ                             // Enable Domoticz (+6k code, +0.3k mem) - Disable by //
+#define USE_DOMOTICZ                             // Enable Domoticz (+6k code, +0.3k mem) - Disable by //
   #define DOMOTICZ_IN_TOPIC      "domoticz/in"   // Domoticz Input Topic
   #define DOMOTICZ_OUT_TOPIC     "domoticz/out"  // Domoticz Output Topic
   #define DOMOTICZ_UPDATE_TIMER  0               // [DomoticzUpdateTimer] Send relay status (0 = disable, 1 - 3600 seconds) (Optional)
 
 // -- MQTT - Home Assistant Discovery -------------
-//#define USE_HOME_ASSISTANT                       // Enable Home Assistant Discovery Support (+1k4 code)
+#define USE_HOME_ASSISTANT                       // Enable Home Assistant Discovery Support (+1k4 code)
   #define HOME_ASSISTANT_DISCOVERY_PREFIX "homeassistant"  // Home Assistant discovery prefix
   #define HOME_ASSISTANT_DISCOVERY_ENABLE 0      // [SetOption19] Home Assistant Discovery (0 = Disable, 1 = Enable)
 
@@ -133,7 +133,7 @@
   #define WEB_PORT             80                // Web server Port for User and Admin mode
   #define WEB_USERNAME         "admin"           // Web server Admin mode user name
   #define WEB_PASSWORD         ""                // [WebPassword] Web server Admin mode Password for WEB_USERNAME (empty string = Disable)
-  #define FRIENDLY_NAME        "s002"          // [FriendlyName] Friendlyname up to 32 characters used by webpages and Alexa
+  #define FRIENDLY_NAME        "Sonoff"          // [FriendlyName] Friendlyname up to 32 characters used by webpages and Alexa
   #define USE_EMULATION                          // Enable Belkin WeMo and Hue Bridge emulation for Alexa (+16k code, +2k mem)
     #define EMULATION          EMUL_NONE         // [Emulation] Select Belkin WeMo (single relay/light) or Hue Bridge emulation (multi relay/light) (EMUL_NONE, EMUL_WEMO or EMUL_HUE)
 
@@ -154,7 +154,7 @@
 #define TIME_STD               North, Last, Sun, Oct, 3, +60   // Northern Hemisphere, Last sunday in october 02:00 +60 minutes
 
 // -- Application ---------------------------------
-#define APP_TIMEZONE           0                 // [Timezone] UTC (-12 .. 12 = hours from UTC, 99 = use TIME_DST/TIME_STD)
+#define APP_TIMEZONE           1                 // [Timezone] +1 hour (Amsterdam) (-12 .. 12 = hours from UTC, 99 = use TIME_DST/TIME_STD)
 #define APP_LEDSTATE           LED_POWER         // [LedState] Function of led (LED_OFF, LED_POWER, LED_MQTTSUB, LED_POWER_MQTTSUB, LED_MQTTPUB, LED_POWER_MQTTPUB, LED_MQTT, LED_POWER_MQTT)
 #define APP_PULSETIME          0                 // [PulseTime] Time in 0.1 Sec to turn off power for relay 1 (0 = disabled)
 #define APP_POWERON_STATE      3                 // [PowerOnState] Power On Relay state (0 = Off, 1 = On, 2 = Toggle Saved state, 3 = Saved state)
@@ -181,7 +181,7 @@
 //#define USE_DS18x20_LEGACY                       // Optional for more than one DS18x20 sensors with dynamic scan using library OneWire (+1k5 code)
 
 // -- I2C sensors ---------------------------------
-//#define USE_I2C                                  // I2C using library wire (+10k code, 0k2 mem, 124 iram)
+#define USE_I2C                                  // I2C using library wire (+10k code, 0k2 mem, 124 iram)
 #ifdef USE_I2C
   #define USE_SHT                                // Add I2C emulating code for SHT1X sensor (+1k4 code)
   #define USE_SHT3X                              // Add I2C code for SHT3x or SHTC3 sensor (+0k7 code)
@@ -199,23 +199,23 @@
 #endif  // USE_I2C
 
 // -- Serial sensors ------------------------------
-//#define USE_MHZ19                                // Add support for MH-Z19 CO2 sensor (+2k code)
-//#define USE_SENSEAIR                             // Add support for SenseAir K30, K70 and S8 CO2 sensor (+2k3 code)
+#define USE_MHZ19                                // Add support for MH-Z19 CO2 sensor (+2k code)
+#define USE_SENSEAIR                             // Add support for SenseAir K30, K70 and S8 CO2 sensor (+2k3 code)
   #define CO2_LOW              800               // Below this CO2 value show green light (needs PWM or WS2812 RG(B) led and enable with SetOption18 1)
   #define CO2_HIGH             1200              // Above this CO2 value show red light (needs PWM or WS2812 RG(B) led and enable with SetOption18 1)
-//#define USE_PMS5003                              // Add support for PMS5003 and PMS7003 particle concentration sensor (+1k3 code)
-//#define USE_PZEM004T                             // Add support for PZEM004T Energy monitor (+2k code)
+#define USE_PMS5003                              // Add support for PMS5003 and PMS7003 particle concentration sensor (+1k3 code)
+#define USE_PZEM004T                             // Add support for PZEM004T Energy monitor (+2k code)
 
 // -- Low level interface devices -----------------
-//#define USE_IR_REMOTE                            // Send IR remote commands using library IRremoteESP8266 and ArduinoJson (+4k code, 0k3 mem, 48 iram)
+#define USE_IR_REMOTE                            // Send IR remote commands using library IRremoteESP8266 and ArduinoJson (+4k code, 0k3 mem, 48 iram)
 //  #define USE_IR_HVAC                            // Support for HVAC system using IR (+2k code)
-//  #define USE_IR_RECEIVE                         // Support for IR receiver (+5k5 code, 264 iram)
+  #define USE_IR_RECEIVE                         // Support for IR receiver (+5k5 code, 264 iram)
 
-//#define USE_WS2812                               // WS2812 Led string using library NeoPixelBus (+5k code, +1k mem, 232 iram) - Disable by //
+#define USE_WS2812                               // WS2812 Led string using library NeoPixelBus (+5k code, +1k mem, 232 iram) - Disable by //
   #define USE_WS2812_CTYPE     1                 // WS2812 Color type (0 - RGB, 1 - GRB, 2 - RGBW, 3 - GRBW)
 //  #define USE_WS2812_DMA                         // DMA supports only GPIO03 (= Serial RXD) (+1k mem). When USE_WS2812_DMA is enabled expect Exceptions on Pow
 
-//#define USE_ARILUX_RF                            // Add support for Arilux RF remote controller (+0k8 code, 252 iram (non 2.3.0))
+#define USE_ARILUX_RF                            // Add support for Arilux RF remote controller (+0k8 code, 252 iram (non 2.3.0))
 
 /*********************************************************************************************\
  * Select all sensors - overrides above undefines!!
