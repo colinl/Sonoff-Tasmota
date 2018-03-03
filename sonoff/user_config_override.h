@@ -36,10 +36,9 @@
 #define CFG_HOLDER           0x18030202   // yymmddnn  change this to force changes to be used immediately
 
 #define USE_TIMEPROP    //  include the timeprop feature
-
-#define D_CMND_TIMEPROP "timeprop_"
-#define D_CMND_TIMEPROP_SETPOWER "setpower"    // payload is power 0:1
-#define D_CMND_TIMEPROP_CMD_B "CmndB"
+  #define TIMEPROP_CYCLETIME  60          // cycle time seconds
+  #define TIMEPROP_DEADTIME   0           // actuator action time seconds
+  #define TIMEPROP_OPINVERT   0           // set to 1 to invert the output
 
 #ifdef WIFI_IP_ADDRESS
 #undef WIFI_IP_ADDRESS
