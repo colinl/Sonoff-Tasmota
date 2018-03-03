@@ -181,6 +181,7 @@ boolean Timeprop_Command()
     //snprintf_P(log_data, sizeof(log_data), "Timeprop Command found: %d", command_code);
     //AddLog(LOG_LEVEL_INFO);
     if (CMND_TIMEPROP_SETPOWER == command_code) {
+
       snprintf_P(log_data, sizeof(log_data), "Timeprop command timeprop_setpower: "
         "index: %d data_len: %d payload: %d topic: %s data: %s",
 	      XdrvMailbox.index,
@@ -191,6 +192,7 @@ boolean Timeprop_Command()
         AddLog(LOG_LEVEL_INFO);
         //timeprop_power = atof(XdrvMailbox.data);
         timeprop.setPower( atof(XdrvMailbox.data) );
+        snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_TIMEPROP D_CMND_TIMEPROP_SETPOWER "\":\"%s\"}"),XdrvMailbox.data);
     }
     else if ((CMND_TIMEPROP_CMD_B == command_code) && (XdrvMailbox.index > 0) && (XdrvMailbox.index <= MAX_DOMOTICZ_IDX)) {
       // if (XdrvMailbox.payload >= 0) {
@@ -211,17 +213,6 @@ boolean Timeprop_Command()
   return serviced;
 }
 
-void Timeprop_Show_Sensor() {
-  // todo: find out what this is used for
-  //snprintf_P(log_data, sizeof(log_data), "Timeprop Show Sensor");
-  //AddLog(LOG_LEVEL_INFO);
-}
-
-void Timeprop_Set_Power() {
-  //snprintf_P(log_data, sizeof(log_data), "Timeprop Set Power");
-  //AddLog(LOG_LEVEL_INFO);
-}
-
 /*********************************************************************************************\
  * Interface
 \*********************************************************************************************/
@@ -236,25 +227,12 @@ boolean Xdrv91(byte function)
   case FUNC_INIT:
     Timeprop_Init();
     break;
-  case FUNC_EVERY_50_MSECOND:
-    // Timeprop_Every_50ms();       CDL Don't need this
-    break;
   case FUNC_EVERY_SECOND:
     Timeprop_Every_Second();
     break;
   case FUNC_COMMAND:
     result = Timeprop_Command();
     break;
-  case FUNC_SHOW_SENSOR:
-    Timeprop_Show_Sensor();
-    break;
-  case FUNC_SET_POWER:
-    Timeprop_Set_Power();
-    break;
-    /* FUNC_MQTT_SUBSCRIBE */
-    /*   FUNC_MQTT_INIT */
-    /*   return FUNC_MQTT_DATA */
-    /*   return FUNC_COMMAND */
   }
   return result;
 }
