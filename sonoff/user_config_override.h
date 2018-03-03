@@ -36,9 +36,24 @@
 #define CFG_HOLDER           0x18030202   // yymmddnn  change this to force changes to be used immediately
 
 #define USE_TIMEPROP    //  include the timeprop feature
-  #define TIMEPROP_CYCLETIME  60          // cycle time seconds
-  #define TIMEPROP_DEADTIME   0           // actuator action time seconds
-  #define TIMEPROP_OPINVERT   0           // set to 1 to invert the output
+  // for single output
+  #define TIMEPROP_NUM_OUTPUTS          1       // how many outputs to control (with separtate alogorithm for each)
+  #define TIMEPROP_CYCLETIMES           60      // cycle time seconds
+  #define TIMEPROP_DEADTIMES            0       // actuator action time seconds
+  #define TIMEPROP_OPINVERTS            false   // whether to invert the output
+  #define TIMEPROP_FALLBACK_POWERS      0       // falls back to this if too long betwen updates
+  #define TIMEPROP_MAX_UPDATE_INTERVALS 120     // max no secs that are allowed between power updates
+  #define TIMEPROP_RELAYS               1       // which relay to control 1:8
+
+  /* example for multiple outputs
+  #define TIMEPROP_NUM_OUTPUTS          2               // how many outputs to control (with separtate alogorithm for each)
+  #define TIMEPROP_CYCLETIMES           60,     10      // cycle time seconds
+  #define TIMEPROP_DEADTIMES            0,      0       // actuator action time seconds
+  #define TIMEPROP_OPINVERTS            false,  false   // whether to invert the output
+  #define TIMEPROP_FALLBACK_POWERS      0,      0       // falls back to this if too long betwen updates
+  #define TIMEPROP_MAX_UPDATE_INTERVALS 120,    120     // max no secs that are allowed between power updates
+  #define TIMEPROP_RELAYS               1,      2       // which relay to control 1:8
+  */
 
 #ifdef WIFI_IP_ADDRESS
 #undef WIFI_IP_ADDRESS

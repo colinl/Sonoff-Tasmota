@@ -1,6 +1,6 @@
 /*
-  xdrv_08_user_application.ino - Timeprop support for Sonoff-Tasmota
-  Copyright (C) 2018 Thomas Herrmann
+  xdrv_91_timeprop.ino - Timeprop support for Sonoff-Tasmota
+  Copyright (C) 2018 Colin Law and Thomas Herrmann
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
@@ -22,11 +22,10 @@
 
 #ifdef USE_TIMEPROP
 #define D_CMND_TIMEPROP "timeprop_"
-#define D_CMND_TIMEPROP_SETPOWER "setpower"    // data is power 0:1
-#define D_CMND_TIMEPROP_CMD_B "CmndB"
+#define D_CMND_TIMEPROP_SETPOWER "setpower_"    // add index no on end (0:8) and data is power 0:1
 
 enum TimepropCommands { CMND_TIMEPROP_SETPOWER, CMND_TIMEPROP_CMD_B };
-const char kTimepropCommands[] PROGMEM = D_CMND_TIMEPROP_SETPOWER "|" D_CMND_TIMEPROP_CMD_B;
+const char kTimepropCommands[] PROGMEM = D_CMND_TIMEPROP_SETPOWER;
 
 class Timeprop {
 public:
@@ -123,17 +122,11 @@ void Timeprop::tick() {
       // only allow power to come on on the way down and off on the way up, to reduce short pulses
       if (effectivePower >= wave  &&  direction == -1) {
           newState = 1;
-          //snprintf_P(log_data, sizeof(log_data), "setting to 1");
-          //AddLog(LOG_LEVEL_INFO);
       } else if (effectivePower <= wave  &&  direction == 1) {
           newState = 0;
-          //snprintf_P(log_data, sizeof(log_data), "setting to 0");
-          //AddLog(LOG_LEVEL_INFO);
       } else {
           // otherwise leave it as it is
           newState = m_opState;
-          //snprintf_P(log_data, sizeof(log_data), "leaving as is");
-          //AddLog(LOG_LEVEL_INFO);
       }
   }
   if (newState != m_opState) {
@@ -142,28 +135,30 @@ void Timeprop::tick() {
   }
 }
 
-static Timeprop timeprop;
+static Timeprop timeprops[TIMEPROP_NUM_OUTPUTS];
 
 void Timeprop_Init()
 {
   snprintf_P(log_data, sizeof(log_data), "Timeprop Init");
   AddLog(LOG_LEVEL_INFO);
-  timeprop.initialise(TIMEPROP_CYCLETIME, TIMEPROP_DEADTIME, TIMEPROP_OPINVERT, TIMEPROP_FALLBACK_POWER,
-    TIMEPROP_MAX_UPDATE_INTERVAL, 1);
-}
+  int cycleTimes[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_CYCLETIMES};
+  int deadTimes[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_DEADTIMES};
+  int opInverts[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_OPINVERTS};
+  int fallbacks[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_FALLBACK_POWERS};
+  int maxInterval[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_MAX_UPDATE_INTERVALS};
+  int relays[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_RELAYS};
 
-int counter_50ms = 0;
-void Timeprop_Every_50ms() {
-  // CDL edited later so this is not called
-  counter_50ms++;
-  if (counter_50ms % 200 == 0) {
-    snprintf_P(log_data, sizeof(log_data), "200 calls of Timeprop Every 50ms");
-    AddLog(LOG_LEVEL_INFO);
-   }
+  for (int i=0; i<TIMEPROP_NUM_OUTPUTS; i++) {
+    timeprops[i].initialise(cycleTimes[i], deadTimes[i], opInverts[i], fallbacks[i],
+      maxInterval[i], relays[i]);
+  }
+
 }
 
 void Timeprop_Every_Second() {
-  timeprop.tick();
+  for (int i=0; i<TIMEPROP_NUM_OUTPUTS; i++) {
+    timeprops[i].tick();
+  }
 }
 
 /* struct XDRVMAILBOX { */
@@ -175,13 +170,13 @@ void Timeprop_Every_Second() {
 /*   char         *data; */
 /* } XdrvMailbox; */
 
-// To get here post with topic cmnd/timeprop_setpower etc
+// To get here post with topic cmnd/timeprop_setpower_n where n is index into timeprops 0:7
 boolean Timeprop_Command()
 {
   char command [CMDSZ];
   boolean serviced = true;
   uint8_t ua_prefix_len = strlen(D_CMND_TIMEPROP); // to detect prefix of command
-/*
+  /*
   snprintf_P(log_data, sizeof(log_data), "Command called: "
     "index: %d data_len: %d payload: %d topic: %s data: %s\n",
     XdrvMailbox.index,
@@ -191,14 +186,12 @@ boolean Timeprop_Command()
     (XdrvMailbox.data_len >= 0 ? XdrvMailbox.data : ""));
 
     AddLog(LOG_LEVEL_INFO);
-*/
+  */
   if (0 == strncasecmp_P(XdrvMailbox.topic, PSTR(D_CMND_TIMEPROP), ua_prefix_len)) {
-    // command starts with Timeprop
+    // command starts with timeprop_
     int command_code = GetCommandCode(command, sizeof(command), XdrvMailbox.topic + ua_prefix_len, kTimepropCommands);
-    //snprintf_P(log_data, sizeof(log_data), "Timeprop Command found: %d", command_code);
-    //AddLog(LOG_LEVEL_INFO);
     if (CMND_TIMEPROP_SETPOWER == command_code) {
-
+      /*
       snprintf_P(log_data, sizeof(log_data), "Timeprop command timeprop_setpower: "
         "index: %d data_len: %d payload: %d topic: %s data: %s",
 	      XdrvMailbox.index,
@@ -207,19 +200,12 @@ boolean Timeprop_Command()
 	      (XdrvMailbox.payload >= 0 ? XdrvMailbox.topic : ""),
 	      (XdrvMailbox.data_len >= 0 ? XdrvMailbox.data : ""));
         AddLog(LOG_LEVEL_INFO);
-        //timeprop_power = atof(XdrvMailbox.data);
-        timeprop.setPower( atof(XdrvMailbox.data) );
-        snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_TIMEPROP D_CMND_TIMEPROP_SETPOWER "\":\"%s\"}"),XdrvMailbox.data);
-    }
-    else if ((CMND_TIMEPROP_CMD_B == command_code) && (XdrvMailbox.index > 0) && (XdrvMailbox.index <= MAX_DOMOTICZ_IDX)) {
-      // if (XdrvMailbox.payload >= 0) {
-      //   Settings.domoticz_key_idx[XdrvMailbox.index -1] = XdrvMailbox.payload;
-      // }
-      snprintf_P(log_data, sizeof(log_data), "Timeprop Command B called.");
-      AddLog(LOG_LEVEL_INFO);
-      // todo:
-      // snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_DOMOTICZ_COMMAND_INDEX_LVALUE, command, XdrvMailbox.index,
-      // Settings.domoticz_key_idx[XdrvMailbox.index -1]);
+      */
+      if (XdrvMailbox.index >=0 && XdrvMailbox.index < TIMEPROP_NUM_OUTPUTS) {
+        timeprops[XdrvMailbox.index].setPower( atof(XdrvMailbox.data) );
+      }
+      snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_TIMEPROP D_CMND_TIMEPROP_SETPOWER "%d\":\"%s\"}"),
+        XdrvMailbox.index, XdrvMailbox.data);
     }
     else {
       serviced = false;
