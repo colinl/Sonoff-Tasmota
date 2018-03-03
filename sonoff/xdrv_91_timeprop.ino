@@ -28,37 +28,55 @@
 enum TimepropCommands { CMND_TIMEPROP_SETPOWER, CMND_TIMEPROP_CMD_B };
 const char kTimepropCommands[] PROGMEM = D_CMND_TIMEPROP_SETPOWER "|" D_CMND_TIMEPROP_CMD_B;
 
-static float timeprop_power = 0.0;
+class Timeprop {
+public:
+  /*
+    Initialiser given
+      cycleTime seconds
+      actuator deadTime seconds
+      whether to invert the output
+      relay number to use 1:8
+  */
+  void initialise( int cycleTime, int deadTime, boolean invert, int relayNo);
 
-void Timeprop_Init()
-{
-  snprintf_P(log_data, sizeof(log_data), "Timeprop Init");
-  AddLog(LOG_LEVEL_INFO);
+  /* set current power required 0:1 */
+  void setPower( float power );
+
+  /* call this regularly to update the output */
+  void tick();
+
+private:
+  int m_cycleTime;        // cycle time seconds, float to force float calcs
+  int m_deadTime;         // actuator action time seconds
+  boolean m_invert;       // whether to invert the output
+  int m_relayNo;          // relay number to use 1:8
+  float m_dtoc;           // deadTime/m_cycleTime
+  int m_opState;          // current output state (before invert)
+  float m_power;          // required power 0:1
+};
+
+void Timeprop::initialise( int cycleTime, int deadTime, boolean invert, int relayNo) {
+  m_cycleTime = cycleTime;
+  m_deadTime = deadTime;
+  m_invert = invert;
+  m_relayNo = relayNo;
+
+  m_dtoc = (float)deadTime/cycleTime;
+  m_opState = -1;   // current output state, initialise to illegal value to indicate unknown
 }
 
-int counter_50ms = 0;
-void Timeprop_Every_50ms() {
-  // CDL edited later so this is not called
-  counter_50ms++;
-  if (counter_50ms % 200 == 0) {
-    snprintf_P(log_data, sizeof(log_data), "200 calls of Timeprop Every 50ms");
-    AddLog(LOG_LEVEL_INFO);
-   }
+inline void Timeprop::setPower( float power ) {
+  m_power = power;
 }
 
-void Timeprop_Every_Second() {
-  static int cycleTime = TIMEPROP_CYCLETIME;        // cycle time seconds, float to force float calcs
-  static int deadTime = TIMEPROP_DEADTIME;            // actuator action time seconds
-  static int invert = TIMEPROP_OPINVERT;              // whether to invert o/p
-
-  static float dtoc = (float)deadTime/cycleTime;
-  static int opState = -1;   // current output state, initiallise to illegal value to indicate unknown
+/* called regularly to update the output */
+void Timeprop::tick() {
   int newState;
   float wave;
   float direction;
   float effectivePower;
 
-  wave = (utc_time % cycleTime)/(float)cycleTime;
+  wave = (utc_time % m_cycleTime)/(float)m_cycleTime;
   // determine direction of travel and convert to triangular wave
   if (wave < 0.5) {
     direction = 1;      // on the way up
@@ -71,10 +89,10 @@ void Timeprop_Every_Second() {
   //snprintf_P(log_data, sizeof(log_data), "wave_pc: %d, direction %d", wave_pc, direction);
   //AddLog(LOG_LEVEL_INFO);
   // if a dead_time has been supplied for this o/p then adjust power accordingly
-  if (deadTime > 0  && timeprop_power > 0.0  &&  timeprop_power < 1.0) {
-      effectivePower = (1.0-2.0*dtoc)*timeprop_power + dtoc;
+  if (m_deadTime > 0  && m_power > 0.0  &&  m_power < 1.0) {
+      effectivePower = (1.0-2.0*m_dtoc)*m_power + m_dtoc;
   } else {
-      effectivePower = timeprop_power;
+      effectivePower = m_power;
   }
   //int epower_pc = effectivePower * 100;
   //int power_pc = timeprop_power * 100;
@@ -97,15 +115,38 @@ void Timeprop_Every_Second() {
           //AddLog(LOG_LEVEL_INFO);
       } else {
           // otherwise leave it as it is
-          newState = opState;
+          newState = m_opState;
           //snprintf_P(log_data, sizeof(log_data), "leaving as is");
           //AddLog(LOG_LEVEL_INFO);
       }
   }
-  if (newState != opState) {
-    opState = newState;
-    ExecuteCommandPower(1, invert ? (1-opState) : opState);
+  if (newState != m_opState) {
+    m_opState = newState;
+    ExecuteCommandPower(m_relayNo, m_invert ? (1-m_opState) : m_opState);
   }
+}
+
+static Timeprop timeprop;
+
+void Timeprop_Init()
+{
+  snprintf_P(log_data, sizeof(log_data), "Timeprop Init");
+  AddLog(LOG_LEVEL_INFO);
+  timeprop.initialise(TIMEPROP_CYCLETIME, TIMEPROP_DEADTIME, TIMEPROP_OPINVERT, 1);
+}
+
+int counter_50ms = 0;
+void Timeprop_Every_50ms() {
+  // CDL edited later so this is not called
+  counter_50ms++;
+  if (counter_50ms % 200 == 0) {
+    snprintf_P(log_data, sizeof(log_data), "200 calls of Timeprop Every 50ms");
+    AddLog(LOG_LEVEL_INFO);
+   }
+}
+
+void Timeprop_Every_Second() {
+  timeprop.tick();
 }
 
 /* struct XDRVMAILBOX { */
@@ -148,7 +189,8 @@ boolean Timeprop_Command()
 	      (XdrvMailbox.payload >= 0 ? XdrvMailbox.topic : ""),
 	      (XdrvMailbox.data_len >= 0 ? XdrvMailbox.data : ""));
         AddLog(LOG_LEVEL_INFO);
-        timeprop_power = atof(XdrvMailbox.data);
+        //timeprop_power = atof(XdrvMailbox.data);
+        timeprop.setPower( atof(XdrvMailbox.data) );
     }
     else if ((CMND_TIMEPROP_CMD_B == command_code) && (XdrvMailbox.index > 0) && (XdrvMailbox.index <= MAX_DOMOTICZ_IDX)) {
       // if (XdrvMailbox.payload >= 0) {
@@ -171,8 +213,8 @@ boolean Timeprop_Command()
 
 void Timeprop_Show_Sensor() {
   // todo: find out what this is used for
-  snprintf_P(log_data, sizeof(log_data), "Timeprop Show Sensor");
-  AddLog(LOG_LEVEL_INFO);
+  //snprintf_P(log_data, sizeof(log_data), "Timeprop Show Sensor");
+  //AddLog(LOG_LEVEL_INFO);
 }
 
 void Timeprop_Set_Power() {
