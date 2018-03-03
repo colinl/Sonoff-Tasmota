@@ -35,9 +35,11 @@ public:
       cycleTime seconds
       actuator deadTime seconds
       whether to invert the output
+      fallback power value if updates are not received within time below
+      max number of seconds to allow between updates before falling back to default power
       relay number to use 1:8
   */
-  void initialise( int cycleTime, int deadTime, boolean invert, int relayNo);
+  void initialise( int cycleTime, int deadTime, boolean invert, float fallbackPower, int maxUpdateInterval, int relayNo);
 
   /* set current power required 0:1 */
   void setPower( float power );
@@ -53,20 +55,27 @@ private:
   float m_dtoc;           // deadTime/m_cycleTime
   int m_opState;          // current output state (before invert)
   float m_power;          // required power 0:1
+  float m_fallbackPower;  // falls back to this if updates not received with max allowed timezone
+  int m_maxUpdateInterval;  // max time between updates
+  uint32_t m_lastPowerUpdateTime;   // the time of last power update
 };
 
-void Timeprop::initialise( int cycleTime, int deadTime, boolean invert, int relayNo) {
+void Timeprop::initialise( int cycleTime, int deadTime, boolean invert, float fallbackPower, int maxUpdateInterval, int relayNo) {
   m_cycleTime = cycleTime;
   m_deadTime = deadTime;
   m_invert = invert;
   m_relayNo = relayNo;
+  m_fallbackPower = fallbackPower;
+  m_maxUpdateInterval = maxUpdateInterval;
 
   m_dtoc = (float)deadTime/cycleTime;
   m_opState = -1;   // current output state, initialise to illegal value to indicate unknown
+  setPower(m_fallbackPower);
 }
 
 inline void Timeprop::setPower( float power ) {
   m_power = power;
+  m_lastPowerUpdateTime = utc_time;
 }
 
 /* called regularly to update the output */
@@ -75,6 +84,13 @@ void Timeprop::tick() {
   float wave;
   float direction;
   float effectivePower;
+
+  // check whether too long has elapsed since power was last updated
+  if (utc_time - m_lastPowerUpdateTime > m_maxUpdateInterval) {
+    snprintf_P(log_data, sizeof(log_data), "No timeprop power updates, reverting to fallback value");
+    AddLog(LOG_LEVEL_INFO);
+    setPower(m_fallbackPower);
+  }
 
   wave = (utc_time % m_cycleTime)/(float)m_cycleTime;
   // determine direction of travel and convert to triangular wave
@@ -132,7 +148,8 @@ void Timeprop_Init()
 {
   snprintf_P(log_data, sizeof(log_data), "Timeprop Init");
   AddLog(LOG_LEVEL_INFO);
-  timeprop.initialise(TIMEPROP_CYCLETIME, TIMEPROP_DEADTIME, TIMEPROP_OPINVERT, 1);
+  timeprop.initialise(TIMEPROP_CYCLETIME, TIMEPROP_DEADTIME, TIMEPROP_OPINVERT, TIMEPROP_FALLBACK_POWER,
+    TIMEPROP_MAX_UPDATE_INTERVAL, 1);
 }
 
 int counter_50ms = 0;
