@@ -13,129 +13,18 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-
-/* This file can be used as a starting point for logic running locally on the device,
-   e.g. to run a thermostat or similar without the need for a home automation platform
-   or MQTT server.
-   Local logic may also be used for critical control tasks that must be running if
-   the automation fails */
-
 #ifdef USE_TIMEPROP
+
+# include "Timeprop.h"
+
 #define D_CMND_TIMEPROP "timeprop_"
 #define D_CMND_TIMEPROP_SETPOWER "setpower_"    // add index no on end (0:8) and data is power 0:1
 
 enum TimepropCommands { CMND_TIMEPROP_SETPOWER, CMND_TIMEPROP_CMD_B };
 const char kTimepropCommands[] PROGMEM = D_CMND_TIMEPROP_SETPOWER;
 
-class Timeprop {
-public:
-  /*
-    Initialiser given
-      cycleTime seconds
-      actuator deadTime seconds
-      whether to invert the output
-      fallback power value if updates are not received within time below
-      max number of seconds to allow between updates before falling back to default power
-      relay number to use 1:8
-  */
-  void initialise( int cycleTime, int deadTime, boolean invert, float fallbackPower, int maxUpdateInterval, int relayNo);
-
-  /* set current power required 0:1 */
-  void setPower( float power );
-
-  /* call this regularly to update the output */
-  void tick();
-
-private:
-  int m_cycleTime;        // cycle time seconds, float to force float calcs
-  int m_deadTime;         // actuator action time seconds
-  boolean m_invert;       // whether to invert the output
-  int m_relayNo;          // relay number to use 1:8
-  float m_dtoc;           // deadTime/m_cycleTime
-  int m_opState;          // current output state (before invert)
-  float m_power;          // required power 0:1
-  float m_fallbackPower;  // falls back to this if updates not received with max allowed timezone
-  int m_maxUpdateInterval;  // max time between updates
-  uint32_t m_lastPowerUpdateTime;   // the time of last power update
-};
-
-void Timeprop::initialise( int cycleTime, int deadTime, boolean invert, float fallbackPower, int maxUpdateInterval, int relayNo) {
-  m_cycleTime = cycleTime;
-  m_deadTime = deadTime;
-  m_invert = invert;
-  m_relayNo = relayNo;
-  m_fallbackPower = fallbackPower;
-  m_maxUpdateInterval = maxUpdateInterval;
-
-  m_dtoc = (float)deadTime/cycleTime;
-  m_opState = -1;   // current output state, initialise to illegal value to indicate unknown
-  setPower(m_fallbackPower);
-}
-
-inline void Timeprop::setPower( float power ) {
-  m_power = power;
-  m_lastPowerUpdateTime = utc_time;
-}
-
-/* called regularly to update the output */
-void Timeprop::tick() {
-  int newState;
-  float wave;
-  float direction;
-  float effectivePower;
-
-  // check whether too long has elapsed since power was last updated
-  if (utc_time - m_lastPowerUpdateTime > m_maxUpdateInterval) {
-    snprintf_P(log_data, sizeof(log_data), "No timeprop power updates, reverting to fallback value");
-    AddLog(LOG_LEVEL_INFO);
-    setPower(m_fallbackPower);
-  }
-
-  wave = (utc_time % m_cycleTime)/(float)m_cycleTime;
-  // determine direction of travel and convert to triangular wave
-  if (wave < 0.5) {
-    direction = 1;      // on the way up
-    wave = wave*2;
-  } else {
-    direction = -1;     // on the way down
-    wave = (1 - wave)*2;
-  }
-  //int wave_pc = wave * 100;
-  //snprintf_P(log_data, sizeof(log_data), "wave_pc: %d, direction %d", wave_pc, direction);
-  //AddLog(LOG_LEVEL_INFO);
-  // if a dead_time has been supplied for this o/p then adjust power accordingly
-  if (m_deadTime > 0  && m_power > 0.0  &&  m_power < 1.0) {
-      effectivePower = (1.0-2.0*m_dtoc)*m_power + m_dtoc;
-  } else {
-      effectivePower = m_power;
-  }
-  //int epower_pc = effectivePower * 100;
-  //int power_pc = timeprop_power * 100;
-  //snprintf_P(log_data, sizeof(log_data), "power_pc: %d, epower_pc: %d", power_pc, epower_pc);
-  //AddLog(LOG_LEVEL_INFO);
-  //  cope with end cases in case values outside 0..1
-  if (effectivePower <= 0.0) {
-      newState = 0;     // no heat
-  } else if (effectivePower >= 1.0) {
-      newState = 1;     // full heat
-  } else {
-      // only allow power to come on on the way down and off on the way up, to reduce short pulses
-      if (effectivePower >= wave  &&  direction == -1) {
-          newState = 1;
-      } else if (effectivePower <= wave  &&  direction == 1) {
-          newState = 0;
-      } else {
-          // otherwise leave it as it is
-          newState = m_opState;
-      }
-  }
-  if (newState != m_opState) {
-    m_opState = newState;
-    ExecuteCommandPower(m_relayNo, m_invert ? (1-m_opState) : m_opState);
-  }
-}
-
 static Timeprop timeprops[TIMEPROP_NUM_OUTPUTS];
+static int relayNos[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_RELAYS};
 
 void Timeprop_Init()
 {
@@ -146,18 +35,19 @@ void Timeprop_Init()
   int opInverts[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_OPINVERTS};
   int fallbacks[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_FALLBACK_POWERS};
   int maxInterval[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_MAX_UPDATE_INTERVALS};
-  int relays[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_RELAYS};
 
   for (int i=0; i<TIMEPROP_NUM_OUTPUTS; i++) {
     timeprops[i].initialise(cycleTimes[i], deadTimes[i], opInverts[i], fallbacks[i],
-      maxInterval[i], relays[i]);
+      maxInterval[i], utc_time);
   }
-
 }
 
 void Timeprop_Every_Second() {
   for (int i=0; i<TIMEPROP_NUM_OUTPUTS; i++) {
-    timeprops[i].tick();
+    int newState = timeprops[i].tick(utc_time);
+    if (newState != -1) {   // -1 means leave as is
+      ExecuteCommandPower(relayNos[i], newState);
+    }
   }
 }
 
@@ -202,7 +92,7 @@ boolean Timeprop_Command()
         AddLog(LOG_LEVEL_INFO);
       */
       if (XdrvMailbox.index >=0 && XdrvMailbox.index < TIMEPROP_NUM_OUTPUTS) {
-        timeprops[XdrvMailbox.index].setPower( atof(XdrvMailbox.data) );
+        timeprops[XdrvMailbox.index].setPower( atof(XdrvMailbox.data), utc_time );
       }
       snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_TIMEPROP D_CMND_TIMEPROP_SETPOWER "%d\":\"%s\"}"),
         XdrvMailbox.index, XdrvMailbox.data);
