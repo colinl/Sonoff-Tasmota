@@ -13,6 +13,63 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+/**
+ * Code to drive one or more relays in a time proportioned manner give a
+ * required power value.
+ *
+ * Given required power values in the range 0.0 to 1.0 the relays will be
+ * driven on/off in such that the average power suppled will represent
+ * the required power.
+ * The cycle time is configurable.  If, for example, the
+ * period is set to 10 minutes and the power input is 0.2 then the output will
+ * be on for two minutes in every ten minutes.
+ *
+ * A value for actuator dead time may be provided. If you have a device that
+ * takes a significant time to open/close then set this to the average of the
+ * open and close times.  The algorithim will then adjust the output timing
+ * accordingly to ensure that the output is not switched more rapidly than
+ * the actuator can cope with.
+ *
+ * A facility to invert the output is provided which can be useful when used in
+ * refrigeration processes and similar.
+ *
+ * In the case where only one relay is being driven the power value is set by
+ * writing the value to the mqtt topic cmnd/timeprop_setpower_0.  If more than
+ * one relay is being driven (as might be the case for a heat/cool application
+ * where one relay drives the heater and the other the cooler) then the power
+ * for the second relay is written to topic cmnd/timeprop_setpower_1 and so on.
+ *
+ * Usage:
+ * Place this file in the sonoff folder.
+ * In user_config.h or user_config_override.h then for a single relay include
+ * code as follows:
+
+ #define USE_TIMEPROP    //  include the timeprop feature
+   // for single output
+   #define TIMEPROP_NUM_OUTPUTS          1       // how many outputs to control (with separate alogorithm for each)
+   #define TIMEPROP_CYCLETIMES           60      // cycle time seconds
+   #define TIMEPROP_DEADTIMES            0       // actuator action time seconds
+   #define TIMEPROP_OPINVERTS            false   // whether to invert the output
+   #define TIMEPROP_FALLBACK_POWERS      0       // falls back to this if too long betwen updates
+   #define TIMEPROP_MAX_UPDATE_INTERVALS 120     // max no secs that are allowed between power updates (0 to disable)
+   #define TIMEPROP_RELAYS               1       // which relay to control 1:8
+
+ * or for two relays:
+ #define USE_TIMEPROP    //  include the timeprop feature
+   // for single output
+   #define TIMEPROP_NUM_OUTPUTS          2               // how many outputs to control (with separate alogorithm for each)
+   #define TIMEPROP_CYCLETIMES           60,     10      // cycle time seconds
+   #define TIMEPROP_DEADTIMES            0,      0       // actuator action time seconds
+   #define TIMEPROP_OPINVERTS            false,  false   // whether to invert the output
+   #define TIMEPROP_FALLBACK_POWERS      0,      0       // falls back to this if too long betwen updates
+   #define TIMEPROP_MAX_UPDATE_INTERVALS 120,    120     // max no secs that are allowed between power updates (0 to disable)
+   #define TIMEPROP_RELAYS               1,      2       // which relay to control 1:8
+
+ * Publish values between 0 and 1 to the topic(s) described above
+ *
+**/
+
+
 #ifdef USE_TIMEPROP
 
 # include "Timeprop.h"
@@ -20,7 +77,7 @@
 #define D_CMND_TIMEPROP "timeprop_"
 #define D_CMND_TIMEPROP_SETPOWER "setpower_"    // add index no on end (0:8) and data is power 0:1
 
-enum TimepropCommands { CMND_TIMEPROP_SETPOWER, CMND_TIMEPROP_CMD_B };
+enum TimepropCommands { CMND_TIMEPROP_SETPOWER };
 const char kTimepropCommands[] PROGMEM = D_CMND_TIMEPROP_SETPOWER;
 
 static Timeprop timeprops[TIMEPROP_NUM_OUTPUTS];
@@ -34,11 +91,11 @@ void Timeprop_Init()
   int deadTimes[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_DEADTIMES};
   int opInverts[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_OPINVERTS};
   int fallbacks[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_FALLBACK_POWERS};
-  int maxInterval[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_MAX_UPDATE_INTERVALS};
+  int maxIntervals[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_MAX_UPDATE_INTERVALS};
 
   for (int i=0; i<TIMEPROP_NUM_OUTPUTS; i++) {
     timeprops[i].initialise(cycleTimes[i], deadTimes[i], opInverts[i], fallbacks[i],
-      maxInterval[i], utc_time);
+      maxIntervals[i], utc_time);
   }
 }
 

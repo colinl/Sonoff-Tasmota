@@ -1,3 +1,23 @@
+/**
+ * Copyright 2018 Colin Law
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * See Timeprop.h for Usage
+ *
+ **/
+
+
 #include "Timeprop.h"
 
 void Timeprop::initialise( int cycleTime, int deadTime, unsigned char invert, float fallbackPower, int maxUpdateInterval,
@@ -13,6 +33,12 @@ void Timeprop::initialise( int cycleTime, int deadTime, unsigned char invert, fl
   setPower(m_fallbackPower, nowSecs);
 }
 
+/* set current power required 0:1, given power and current time in seconds */
+void Timeprop::setPower( float power, unsigned long nowSecs ) {
+  m_power = power;
+  m_lastPowerUpdateTime = nowSecs;
+};
+
 /* called regularly to provide new output value */
 /* returns new o/p state 0, 1 or -1 to leave as is */
 int Timeprop::tick( unsigned long nowSecs) {
@@ -23,7 +49,7 @@ int Timeprop::tick( unsigned long nowSecs) {
   float effectivePower;
 
   // check whether too long has elapsed since power was last updated
-  if (nowSecs - m_lastPowerUpdateTime > m_maxUpdateInterval) {
+  if (m_maxUpdateInterval > 0  &&  nowSecs - m_lastPowerUpdateTime > m_maxUpdateInterval) {
     // yes, go to fallback power
     setPower(m_fallbackPower, nowSecs);
   }
