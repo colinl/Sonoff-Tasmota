@@ -39,29 +39,37 @@
  * where one relay drives the heater and the other the cooler) then the power
  * for the second relay is written to topic cmnd/timeprop_setpower_1 and so on.
  *
+ * To cope with the problem of temporary wifi failure etc a
+ * TIMEPROP_MAX_UPDATE_INTERVALS value is available. This can be set to the max
+ * expected time between power updates and if this time is exceeded then the
+ * power will fallback to a given safe value until a new value is provided. Set
+ * the interval to 0 to disable this feature.
+ *
  * Usage:
  * Place this file in the sonoff folder.
- * In user_config.h or user_config_override.h then for a single relay include
+ * Clone the library https://github.com/colinl/process-control.git from Github
+ * into a subfolder of lib.
+ * In user_config.h or user_config_override.h for a single relay, include
  * code as follows:
 
- #define USE_TIMEPROP    //  include the timeprop feature
+ #define USE_TIMEPROP    //  include the timeprop feature (+1.2k)
    // for single output
    #define TIMEPROP_NUM_OUTPUTS          1       // how many outputs to control (with separate alogorithm for each)
    #define TIMEPROP_CYCLETIMES           60      // cycle time seconds
    #define TIMEPROP_DEADTIMES            0       // actuator action time seconds
    #define TIMEPROP_OPINVERTS            false   // whether to invert the output
-   #define TIMEPROP_FALLBACK_POWERS      0       // falls back to this if too long betwen updates
+   #define TIMEPROP_FALLBACK_POWERS      0       // falls back to this if too long betwen power updates
    #define TIMEPROP_MAX_UPDATE_INTERVALS 120     // max no secs that are allowed between power updates (0 to disable)
    #define TIMEPROP_RELAYS               1       // which relay to control 1:8
 
  * or for two relays:
- #define USE_TIMEPROP    //  include the timeprop feature
+ #define USE_TIMEPROP    //  include the timeprop feature (+1.2k)
    // for single output
    #define TIMEPROP_NUM_OUTPUTS          2               // how many outputs to control (with separate alogorithm for each)
    #define TIMEPROP_CYCLETIMES           60,     10      // cycle time seconds
    #define TIMEPROP_DEADTIMES            0,      0       // actuator action time seconds
    #define TIMEPROP_OPINVERTS            false,  false   // whether to invert the output
-   #define TIMEPROP_FALLBACK_POWERS      0,      0       // falls back to this if too long betwen updates
+   #define TIMEPROP_FALLBACK_POWERS      0,      0       // falls back to this if too long betwen power updates
    #define TIMEPROP_MAX_UPDATE_INTERVALS 120,    120     // max no secs that are allowed between power updates (0 to disable)
    #define TIMEPROP_RELAYS               1,      2       // which relay to control 1:8
 
