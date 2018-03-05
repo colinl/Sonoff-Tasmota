@@ -48,7 +48,7 @@ typedef unsigned long power_t;              // Power (Relay) type
 #define MAX_DOMOTICZ_IDX       4            // Max number of Domoticz device, key and switch indices
 #define MAX_DOMOTICZ_SNS_IDX   12           // Max number of Domoticz sensors indices
 
-#define MODULE                 SONOFF_BASIC // [Module] Select default model
+#define MODULE                 SONOFF_TH // [Module] Select default model
 
 #define MQTT_TOKEN_PREFIX      "%prefix%"   // To be substituted by mqtt_prefix[x]
 #define MQTT_TOKEN_TOPIC       "%topic%"    // To be substituted by mqtt_topic, mqtt_grptopic, mqtt_buttontopic, mqtt_switchtopic

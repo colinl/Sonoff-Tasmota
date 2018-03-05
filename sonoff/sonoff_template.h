@@ -296,7 +296,7 @@ const mytmplt kModules[MAXMODULE] PROGMEM = {
      0, 0, 0, 0, 0, 0, // Flash connection
      GPIO_REL1,        // GPIO12 Red Led and Relay (0 = Off, 1 = On)
      GPIO_LED1_INV,    // GPIO13 Green Led (0 = On, 1 = Off)
-     GPIO_USER,        // GPIO14 Optional sensor
+     GPIO_DSB,        // GPIO14 Optional sensor CDL changed for DS18B20
      0, 0, 0
   },
   { "Sonoff Dual",     // Sonoff Dual (ESP8266)
