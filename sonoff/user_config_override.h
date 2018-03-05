@@ -35,7 +35,7 @@
 #endif
 #define CFG_HOLDER           0x18030501   // yymmddnn  change this to force changes to be used immediately
 
-//#define USE_TIMEPROP    //  include the timeprop feature (+1.2k)
+#define USE_TIMEPROP    //  include the timeprop feature (+1.2k)
   // for single output
   #define TIMEPROP_NUM_OUTPUTS          1       // how many outputs to control (with separate alogorithm for each)
   #define TIMEPROP_CYCLETIMES           60      // cycle time seconds
