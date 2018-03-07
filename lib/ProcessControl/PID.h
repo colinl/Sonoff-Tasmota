@@ -47,11 +47,23 @@ public:
   void initialise( double setpoint, double prop_band, double t_integral, double t_derivative,
     double integral_default, double smooth_factor, unsigned char mode_auto, double manual_op );
 
-  // call to pass in new process value
-  void setPv( double pv, unsigned long nowSecs );
 
   /* called regularly to calculate and return new power value */
   double tick(unsigned long nowSecs);
+
+  // call to pass in new process value
+  void setPv( double pv, unsigned long nowSecs );
+
+  // methods to modify configuration data
+  void setSp( double setpoint );
+  void setPb( double prop_band );
+  void setTi( double t_integral );
+  void setTd( double t_derivative );
+  void setInitialInt( double integral_default );
+  void setDSmooth( double smooth_factor );
+  void setAuto( unsigned char mode_auto );
+  void setManualPower( double manual_op );
+  //void setUpdateSecs( double update_secs );
 
 private:
 

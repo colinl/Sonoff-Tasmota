@@ -55,3 +55,44 @@ double PID::tick( unsigned long nowSecs ) {
   */
   return 0.5;
 }
+
+
+// call to pass in new process value
+void PID::setPv( double pv, unsigned long nowSecs ){
+
+}
+
+// methods to modify configuration data
+void PID::setSp( double setpoint ) {
+  m_setpoint = setpoint;
+}
+
+void PID::setPb( double prop_band ) {
+  m_prop_band = prop_band;
+}
+
+void PID::setTi( double t_integral ) {
+  m_t_integral = t_integral;
+}
+
+void PID::setTd( double t_derivative ) {
+  m_t_derivative = t_derivative;
+}
+
+void PID::setInitialInt( double integral_default ) {
+  m_integral_default = integral_default;
+}
+
+void PID::setDSmooth( double smooth_factor ) {
+  m_smooth_factor = smooth_factor;
+}
+
+void PID::setAuto( unsigned char mode_auto ) {
+  m_mode_auto = mode_auto;
+}
+
+void PID::setManualPower( double manual_op ) {
+  m_manual_op = manual_op;
+}
+
+//void PID::setUpdateSecs( double update_secs );

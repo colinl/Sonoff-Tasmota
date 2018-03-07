@@ -102,32 +102,81 @@ boolean PID_Command()
   AddLog(LOG_LEVEL_INFO);
 
   if (0 == strncasecmp_P(XdrvMailbox.topic, PSTR(D_CMND_PID), ua_prefix_len)) {
-    // command starts with pid__
+    // command starts with pid_
+    snprintf_P(log_data, sizeof(log_data), "PID command");
+    AddLog(LOG_LEVEL_INFO);
     int command_code = GetCommandCode(command, sizeof(command), XdrvMailbox.topic + ua_prefix_len, kPIDCommands);
+    snprintf_P(log_data, sizeof(log_data), "PID command code: %d", command_code);
+    AddLog(LOG_LEVEL_INFO);
     serviced = true;
     switch (command_code) {
       case CMND_PID_SETPV:
-      /*
-      snprintf_P(log_data, sizeof(log_data), "Timeprop command timeprop_setpower: "
-        "index: %d data_len: %d payload: %d topic: %s data: %s",
-	      XdrvMailbox.index,
-	      XdrvMailbox.data_len,
-	      XdrvMailbox.payload,
-	      (XdrvMailbox.payload >= 0 ? XdrvMailbox.topic : ""),
-	      (XdrvMailbox.data_len >= 0 ? XdrvMailbox.data : ""));
+        snprintf_P(log_data, sizeof(log_data), "PID command setpv");
         AddLog(LOG_LEVEL_INFO);
+        pid.setPv(atof(XdrvMailbox.data), utc_time);
+        break;
 
-      if (XdrvMailbox.index >=0 && XdrvMailbox.index < TIMEPROP_NUM_OUTPUTS) {
-        timeprops[XdrvMailbox.index].setPower( atof(XdrvMailbox.data), utc_time );
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_TIMEPROP D_CMND_TIMEPROP_SETPOWER "%d\":\"%s\"}"),
-        XdrvMailbox.index, XdrvMailbox.data);
-        */
-      break;
+      case CMND_PID_SETSETPOINT:
+        snprintf_P(log_data, sizeof(log_data), "PID command setsetpoint");
+        AddLog(LOG_LEVEL_INFO);
+        pid.setSp(atof(XdrvMailbox.data));
+        break;
 
-    case CMND_PID_SETSETPOINT:
-      break;
+      case CMND_PID_SETPROPBAND:
+        snprintf_P(log_data, sizeof(log_data), "PID command propband");
+        AddLog(LOG_LEVEL_INFO);
+        pid.setPb(atof(XdrvMailbox.data));
+        break;
 
+      case CMND_PID_SETINTEGRAL_TIME:
+        snprintf_P(log_data, sizeof(log_data), "PID command Ti");
+        AddLog(LOG_LEVEL_INFO);
+        pid.setTi(atof(XdrvMailbox.data));
+        break;
+
+      case CMND_PID_SETDERIVATIVE_TIME:
+        snprintf_P(log_data, sizeof(log_data), "PID command Td");
+        AddLog(LOG_LEVEL_INFO);
+        pid.setTd(atof(XdrvMailbox.data));
+        break;
+
+      case CMND_PID_SETINITIAL_INT:
+        snprintf_P(log_data, sizeof(log_data), "PID command initial int");
+        AddLog(LOG_LEVEL_INFO);
+        pid.setInitialInt(atof(XdrvMailbox.data));
+        break;
+
+      case CMND_PID_SETDERIV_SMOOTH_FACTOR:
+        snprintf_P(log_data, sizeof(log_data), "PID command deriv smooth");
+        AddLog(LOG_LEVEL_INFO);
+        pid.setDSmooth(atof(XdrvMailbox.data));
+        break;
+
+      case CMND_PID_SETAUTO:
+        snprintf_P(log_data, sizeof(log_data), "PID command auto");
+        AddLog(LOG_LEVEL_INFO);
+        pid.setAuto(atoi(XdrvMailbox.data));
+        break;
+
+      case CMND_PID_SETMANUAL_POWER:
+        snprintf_P(log_data, sizeof(log_data), "PID command manual power");
+        AddLog(LOG_LEVEL_INFO);
+        pid.setManualPower(atof(XdrvMailbox.data));
+        break;
+/*
+      case CMND_PID_SETUPDATE_SECS:
+        snprintf_P(log_data, sizeof(log_data), "PID command set update secs");
+        AddLog(LOG_LEVEL_INFO);
+        pid.setUpdateSecs(atoi(XdrvMailbox.data));
+        break;
+*/
+      default:
+        serviced = false;
+  }
+
+    if (serviced) {
+      // set mqtt RESULT
+      snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"%s\":\"%s\"}"), XdrvMailbox.topic, XdrvMailbox.data);
     }
 
   } else {
