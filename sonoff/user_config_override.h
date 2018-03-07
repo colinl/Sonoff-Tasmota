@@ -35,6 +35,8 @@
 #endif
 #define CFG_HOLDER           0x18030202   // yymmddnn  change this to force changes to be used immediately
 
+#define USE_PID
+
 #define USE_TIMEPROP    //  include the timeprop feature (+1.2k)
   // for single output
   #define TIMEPROP_NUM_OUTPUTS          1       // how many outputs to control (with separate alogorithm for each)
