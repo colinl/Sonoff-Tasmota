@@ -140,6 +140,10 @@
 
 // Unneeded extras
 
+#ifdef USE_DOMOTICZ
+#undef USE_DOMOTICZ
+#endif
+
 #ifdef USE_DISCOVERY
 #undef USE_DISCOVERY                          // Disable Discovery services for both MQTT and web server
 #endif
