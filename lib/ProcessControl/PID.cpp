@@ -20,19 +20,30 @@
 
 #include "PID.h"
 
-void PID::initialise(
-  unsigned long nowSecs) {
+PID::PID() {
+  m_initialised = 0;
+}
 
-  //m_fallbackPower = fallbackPower;
-  //m_maxUpdateInterval = maxUpdateInterval;
+void PID::initialise( double setpoint, double prop_band, double t_integral, double t_derivative,
+  double integral_default, double smooth_factor, unsigned char mode_auto, double manual_op ) {
 
+  m_setpoint = setpoint;
+  m_prop_band = prop_band;
+  m_t_integral = t_integral;
+  m_t_derivative = t_derivative;
+  m_integral_default = integral_default;
+  m_smooth_factor= smooth_factor;
+  m_mode_auto= mode_auto;
+  m_manual_op = manual_op;
+
+  m_initialised = 1;
 
 }
 
 
-/* called regularly to provide new output value */
-/* returns new o/p state 0, 1 or -1 to leave as is */
-int PID::tick( unsigned long nowSecs) {
+/* called regularly to calculate and return new power value */
+double PID::tick( unsigned long nowSecs ) {
+  m_lastPvUpdateTime = nowSecs;
 
 
   // check whether too long has elapsed since power was last updated
@@ -42,5 +53,5 @@ int PID::tick( unsigned long nowSecs) {
 
   }
   */
-
+  return 0.5;
 }

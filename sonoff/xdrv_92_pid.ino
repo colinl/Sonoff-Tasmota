@@ -36,39 +36,44 @@
 # include "PID.h"
 
 #define D_CMND_PID "pid_"
-/*
-#define D_CMND_TIMEPROP_SETPOWER "setpower_"    // add index no on end (0:8) and data is power 0:1
 
-enum TimepropCommands { CMND_TIMEPROP_SETPOWER };
-const char kTimepropCommands[] PROGMEM = D_CMND_TIMEPROP_SETPOWER;
-*/
+#define D_CMND_PID_SETPV "pv"
+#define D_CMND_PID_SETSETPOINT "sp"
+#define D_CMND_PID_SETPROPBAND "pb"
+#define D_CMND_PID_SETINTEGRAL_TIME "ti"
+#define D_CMND_PID_SETDERIVATIVE_TIME "td"
+#define D_CMND_PID_SETINITIAL_INT "initint"
+#define D_CMND_PID_SETDERIV_SMOOTH_FACTOR "d_smooth"
+#define D_CMND_PID_SETAUTO "auto"
+#define D_CMND_PID_SETMANUAL_POWER "manual_power"
+#define D_CMND_PID_SETUPDATE_SECS "update_secs"
+
+enum PIDCommands { CMND_PID_SETPV, CMND_PID_SETSETPOINT, CMND_PID_SETPROPBAND, CMND_PID_SETINTEGRAL_TIME,
+  CMND_PID_SETDERIVATIVE_TIME, CMND_PID_SETINITIAL_INT, CMND_PID_SETDERIV_SMOOTH_FACTOR, CMND_PID_SETAUTO,
+  CMND_PID_SETMANUAL_POWER, CMND_PID_SETUPDATE_SECS };
+const char kPIDCommands[] PROGMEM = D_CMND_PID_SETPV "|" D_CMND_PID_SETSETPOINT "|" D_CMND_PID_SETPROPBAND "|"
+  D_CMND_PID_SETINTEGRAL_TIME "|" D_CMND_PID_SETDERIVATIVE_TIME "|" D_CMND_PID_SETINITIAL_INT "|" D_CMND_PID_SETDERIV_SMOOTH_FACTOR "|"
+  D_CMND_PID_SETAUTO "|" D_CMND_PID_SETMANUAL_POWER "|" D_CMND_PID_SETUPDATE_SECS;
+
+static PID pid;
+
 void PID_Init()
 {
   snprintf_P(log_data, sizeof(log_data), "PID Init");
   AddLog(LOG_LEVEL_INFO);
-  /*
-  int cycleTimes[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_CYCLETIMES};
-  int deadTimes[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_DEADTIMES};
-  int opInverts[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_OPINVERTS};
-  int fallbacks[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_FALLBACK_POWERS};
-  int maxIntervals[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_MAX_UPDATE_INTERVALS};
-
-  for (int i=0; i<TIMEPROP_NUM_OUTPUTS; i++) {
-    timeprops[i].initialise(cycleTimes[i], deadTimes[i], opInverts[i], fallbacks[i],
-      maxIntervals[i], utc_time);
-  }
-  */
+  pid.initialise( PID_SETPOINT, PID_PROPBAND, PID_INTEGRAL_TIME, PID_DERIVATIVE_TIME, PID_INITIAL_INT,
+    PID_DERIV_SMOOTH_FACTOR, PID_AUTO, PID_MANUAL_POWER );
 }
 
 void PID_Every_Second() {
-  /*
-  for (int i=0; i<TIMEPROP_NUM_OUTPUTS; i++) {
-    int newState = timeprops[i].tick(utc_time);
-    if (newState != -1) {   // -1 means leave as is
-      ExecuteCommandPower(relayNos[i], newState);
-    }
+  static int sec_counter = 0;
+  if (sec_counter++ % PID_UPDATE_SECS  ==  0) {
+    snprintf_P(log_data, sizeof(log_data), "Calling PID::tick()");
+    AddLog(LOG_LEVEL_INFO);
+    double power = pid.tick(utc_time);
+    snprintf_P(log_data, sizeof(log_data), "Power from PID::tick(): %d%", power*100);
+    AddLog(LOG_LEVEL_INFO);
   }
-  */
 }
 
 /* struct XDRVMAILBOX { */
@@ -94,14 +99,14 @@ boolean PID_Command()
     XdrvMailbox.payload,
     (XdrvMailbox.payload >= 0 ? XdrvMailbox.topic : ""),
     (XdrvMailbox.data_len >= 0 ? XdrvMailbox.data : ""));
-
-    AddLog(LOG_LEVEL_INFO);
+  AddLog(LOG_LEVEL_INFO);
 
   if (0 == strncasecmp_P(XdrvMailbox.topic, PSTR(D_CMND_PID), ua_prefix_len)) {
-    #if 0
-    // command starts with timeprop_
-    int command_code = GetCommandCode(command, sizeof(command), XdrvMailbox.topic + ua_prefix_len, kTimepropCommands);
-    if (CMND_TIMEPROP_SETPOWER == command_code) {
+    // command starts with pid__
+    int command_code = GetCommandCode(command, sizeof(command), XdrvMailbox.topic + ua_prefix_len, kPIDCommands);
+    serviced = true;
+    switch (command_code) {
+      case CMND_PID_SETPV:
       /*
       snprintf_P(log_data, sizeof(log_data), "Timeprop command timeprop_setpower: "
         "index: %d data_len: %d payload: %d topic: %s data: %s",
@@ -111,18 +116,20 @@ boolean PID_Command()
 	      (XdrvMailbox.payload >= 0 ? XdrvMailbox.topic : ""),
 	      (XdrvMailbox.data_len >= 0 ? XdrvMailbox.data : ""));
         AddLog(LOG_LEVEL_INFO);
-      */
+
       if (XdrvMailbox.index >=0 && XdrvMailbox.index < TIMEPROP_NUM_OUTPUTS) {
         timeprops[XdrvMailbox.index].setPower( atof(XdrvMailbox.data), utc_time );
       }
       snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_TIMEPROP D_CMND_TIMEPROP_SETPOWER "%d\":\"%s\"}"),
         XdrvMailbox.index, XdrvMailbox.data);
+        */
+      break;
+
+    case CMND_PID_SETSETPOINT:
+      break;
+
     }
-    else {
-      serviced = false;
-    }
-    #endif //0
-    serviced = false;     // remove this ************************************************
+
   } else {
     serviced = false;
   }

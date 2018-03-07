@@ -36,23 +36,36 @@
 
 class PID {
 public:
+
+  PID();
+
   /*
     Initialiser given
 
       current time in seconds
   */
-  void initialise( 
-    unsigned long nowSecs);
+  void initialise( double setpoint, double prop_band, double t_integral, double t_derivative,
+    double integral_default, double smooth_factor, unsigned char mode_auto, double manual_op );
 
+  // call to pass in new process value
+  void setPv( double pv, unsigned long nowSecs );
 
-  /* called regularly to provide new output value */
-  /* returns ...*/
-  int tick(unsigned long nowSecs);
+  /* called regularly to calculate and return new power value */
+  double tick(unsigned long nowSecs);
 
 private:
 
-  int m_maxUpdateInterval;  // max time between updates
-  unsigned long m_lastPowerUpdateTime;   // the time of last power update secs
+  unsigned char m_initialised;
+  double m_setpoint;
+  double m_prop_band;
+  double m_t_integral;
+  double m_t_derivative;
+  double m_integral_default;
+  double m_smooth_factor;
+  unsigned char m_mode_auto;
+  double m_manual_op;
+
+  unsigned long m_lastPvUpdateTime;   // the time of last power update secs
 };
 
 #endif // Timeprop_h
