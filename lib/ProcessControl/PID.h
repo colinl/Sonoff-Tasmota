@@ -63,7 +63,6 @@ public:
   void setDSmooth( double smooth_factor );
   void setAuto( unsigned char mode_auto );
   void setManualPower( double manual_op );
-  //void setUpdateSecs( double update_secs );
 
 private:
 

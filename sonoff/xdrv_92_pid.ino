@@ -56,6 +56,7 @@ const char kPIDCommands[] PROGMEM = D_CMND_PID_SETPV "|" D_CMND_PID_SETSETPOINT 
   D_CMND_PID_SETAUTO "|" D_CMND_PID_SETMANUAL_POWER "|" D_CMND_PID_SETUPDATE_SECS;
 
 static PID pid;
+static int update_secs = PID_UPDATE_SECS <= 0  ?  1  :  PID_UPDATE_SECS;   // how often (secs) the pid alogorithm is run
 
 void PID_Init()
 {
@@ -67,7 +68,7 @@ void PID_Init()
 
 void PID_Every_Second() {
   static int sec_counter = 0;
-  if (sec_counter++ % PID_UPDATE_SECS  ==  0) {
+  if (sec_counter++ % update_secs  ==  0) {
     snprintf_P(log_data, sizeof(log_data), "Calling PID::tick()");
     AddLog(LOG_LEVEL_INFO);
     double power = pid.tick(utc_time);
@@ -163,13 +164,14 @@ boolean PID_Command()
         AddLog(LOG_LEVEL_INFO);
         pid.setManualPower(atof(XdrvMailbox.data));
         break;
-/*
+
       case CMND_PID_SETUPDATE_SECS:
         snprintf_P(log_data, sizeof(log_data), "PID command set update secs");
         AddLog(LOG_LEVEL_INFO);
-        pid.setUpdateSecs(atoi(XdrvMailbox.data));
+        update_secs = atoi(XdrvMailbox.data) ;
+        if (update_secs <= 0) update_secs = 1;
         break;
-*/
+
       default:
         serviced = false;
   }
