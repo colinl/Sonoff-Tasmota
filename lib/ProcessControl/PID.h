@@ -45,7 +45,7 @@ public:
       current time in seconds
   */
   void initialise( double setpoint, double prop_band, double t_integral, double t_derivative,
-    double integral_default, double smooth_factor, unsigned char mode_auto, double manual_op );
+    double integral_default, int max_interval, double smooth_factor, unsigned char mode_auto, double manual_op );
 
 
   /* called regularly to calculate and return new power value */
@@ -63,10 +63,10 @@ public:
   void setDSmooth( double smooth_factor );
   void setAuto( unsigned char mode_auto );
   void setManualPower( double manual_op );
+  void setMaxInterval( int max_interval );
 
 private:
-
-  unsigned char m_initialised;
+  double m_pv;
   double m_setpoint;
   double m_prop_band;
   double m_t_integral;
@@ -75,8 +75,15 @@ private:
   double m_smooth_factor;
   unsigned char m_mode_auto;
   double m_manual_op;
+  int m_max_interval;
 
-  unsigned long m_lastPvUpdateTime;   // the time of last power update secs
+
+  unsigned char m_initialised;
+  unsigned long m_lastPvUpdateTime;   // the time of last pv update secs
+  unsigned long m_last_sample_time;   // the time of the last tick() run
+  double m_smoothed_value;
+  double m_integral;
+  double m_derivative ;
 };
 
 #endif // Timeprop_h

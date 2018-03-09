@@ -46,14 +46,15 @@
 #define D_CMND_PID_SETDERIV_SMOOTH_FACTOR "d_smooth"
 #define D_CMND_PID_SETAUTO "auto"
 #define D_CMND_PID_SETMANUAL_POWER "manual_power"
+#define D_CMND_PID_SETMAX_INTERVAL "max_interval"
 #define D_CMND_PID_SETUPDATE_SECS "update_secs"
 
 enum PIDCommands { CMND_PID_SETPV, CMND_PID_SETSETPOINT, CMND_PID_SETPROPBAND, CMND_PID_SETINTEGRAL_TIME,
   CMND_PID_SETDERIVATIVE_TIME, CMND_PID_SETINITIAL_INT, CMND_PID_SETDERIV_SMOOTH_FACTOR, CMND_PID_SETAUTO,
-  CMND_PID_SETMANUAL_POWER, CMND_PID_SETUPDATE_SECS };
+  CMND_PID_SETMANUAL_POWER, CMND_PID_SETMAX_INTERVAL, CMND_PID_SETUPDATE_SECS };
 const char kPIDCommands[] PROGMEM = D_CMND_PID_SETPV "|" D_CMND_PID_SETSETPOINT "|" D_CMND_PID_SETPROPBAND "|"
   D_CMND_PID_SETINTEGRAL_TIME "|" D_CMND_PID_SETDERIVATIVE_TIME "|" D_CMND_PID_SETINITIAL_INT "|" D_CMND_PID_SETDERIV_SMOOTH_FACTOR "|"
-  D_CMND_PID_SETAUTO "|" D_CMND_PID_SETMANUAL_POWER "|" D_CMND_PID_SETUPDATE_SECS;
+  D_CMND_PID_SETAUTO "|" D_CMND_PID_SETMANUAL_POWER "|" D_CMND_PID_SETMAX_INTERVAL "|" D_CMND_PID_SETUPDATE_SECS;
 
 static PID pid;
 static int update_secs = PID_UPDATE_SECS <= 0  ?  1  :  PID_UPDATE_SECS;   // how often (secs) the pid alogorithm is run
@@ -63,7 +64,7 @@ void PID_Init()
   snprintf_P(log_data, sizeof(log_data), "PID Init");
   AddLog(LOG_LEVEL_INFO);
   pid.initialise( PID_SETPOINT, PID_PROPBAND, PID_INTEGRAL_TIME, PID_DERIVATIVE_TIME, PID_INITIAL_INT,
-    PID_DERIV_SMOOTH_FACTOR, PID_AUTO, PID_MANUAL_POWER );
+    PID_MAX_INTERVAL, PID_DERIV_SMOOTH_FACTOR, PID_AUTO, PID_MANUAL_POWER );
 }
 
 void PID_Every_Second() {
@@ -71,8 +72,14 @@ void PID_Every_Second() {
   if (sec_counter++ % update_secs  ==  0) {
     snprintf_P(log_data, sizeof(log_data), "Calling PID::tick()");
     AddLog(LOG_LEVEL_INFO);
+    //float t;
+    //Ds18b20Read(t);
+    //snprintf_P(log_data, sizeof(log_data), "Ds18b20Read * 1000: %d", t*1000);
+    //AddLog(LOG_LEVEL_INFO);
     double power = pid.tick(utc_time);
-    snprintf_P(log_data, sizeof(log_data), "Power from PID::tick(): %d%", power*100);
+    char buf[10];
+    dtostrfd(power, 2, buf);
+    snprintf_P(log_data, sizeof(log_data), "Power from PID::tick(): %s", buf);
     AddLog(LOG_LEVEL_INFO);
   }
 }
@@ -164,6 +171,12 @@ boolean PID_Command()
         AddLog(LOG_LEVEL_INFO);
         pid.setManualPower(atof(XdrvMailbox.data));
         break;
+
+      case CMND_PID_SETMAX_INTERVAL:
+      snprintf_P(log_data, sizeof(log_data), "PID command set max interval");
+      AddLog(LOG_LEVEL_INFO);
+      pid.setMaxInterval(atoi(XdrvMailbox.data)) ;
+      break;
 
       case CMND_PID_SETUPDATE_SECS:
         snprintf_P(log_data, sizeof(log_data), "PID command set update secs");

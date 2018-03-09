@@ -41,11 +41,11 @@
   #define PID_INTEGRAL_TIME             3600    // integral time seconds
   #define PID_DERIVATIVE_TIME           0       // derivative time seconds
   #define PID_INITIAL_INT               0.0     // initial integral value (0:1)
-//  #define PID_MAX_INTERVAL              300     // max expected time between pv updates (used to prevent integral windup)
+  #define PID_MAX_INTERVAL              300     // max expected time between pv updates (used to prevent integral windup)
   #define PID_DERIV_SMOOTH_FACTOR       0       // derivative smoothing factor
   #define PID_AUTO                      1       // initial state enabled (1) or disabled (2)
-  #define PID_MANUAL_POWER              0       // power output when loop is disabled
-  #define PID_UPDATE_SECS               10      // how often to run the pid algorithm (integer secs)
+  #define PID_MANUAL_POWER              0.25    // power output when loop is disabled
+  #define PID_UPDATE_SECS               20      // how often to run the pid algorithm (integer secs)
 
 
 #define USE_TIMEPROP    //  include the timeprop feature (+1.2k)
