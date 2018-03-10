@@ -78,9 +78,11 @@ void PID_Every_Second() {
     //AddLog(LOG_LEVEL_INFO);
     double power = pid.tick(utc_time);
     char buf[10];
-    dtostrfd(power, 2, buf);
+    dtostrfd(power, 3, buf);
     snprintf_P(log_data, sizeof(log_data), "Power from PID::tick(): %s", buf);
     AddLog(LOG_LEVEL_INFO);
+    snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"%s\":\"%s\"}"), "power", buf);
+    MqttPublishPrefixTopic_P(TELE, "PID", false);
   }
 }
 
