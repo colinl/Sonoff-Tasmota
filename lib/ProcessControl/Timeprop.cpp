@@ -35,6 +35,11 @@ void Timeprop::initialise( int cycleTime, int deadTime, unsigned char invert, fl
 
 /* set current power required 0:1, given power and current time in seconds */
 void Timeprop::setPower( float power, unsigned long nowSecs ) {
+  if (power < 0.0) {
+    power = 0.0;
+  } else if (power >= 1.0) {
+    power = 1.0;
+  }
   m_power = power;
   m_lastPowerUpdateTime = nowSecs;
 };
