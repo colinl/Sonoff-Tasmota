@@ -83,6 +83,10 @@ void PID_Every_Second() {
     AddLog(LOG_LEVEL_INFO);
     snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"%s\":\"%s\"}"), "power", buf);
     MqttPublishPrefixTopic_P(TELE, "PID", false);
+#if defined PID_USE_TIMPROP
+      // send power to appropriate timeprop output
+      Timeprop_Set_Power( PID_USE_TIMPROP-1, power );
+#endif // PID_USE_TIMPROP
   }
 }
 

@@ -91,6 +91,16 @@ const char kTimepropCommands[] PROGMEM = D_CMND_TIMEPROP_SETPOWER;
 static Timeprop timeprops[TIMEPROP_NUM_OUTPUTS];
 static int relayNos[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_RELAYS};
 
+/* call this from elsewhere if required to set the power value for one of the timeprop instances */
+/* index specifies which one, 0 up */
+void Timeprop_Set_Power( int index, float power )
+{
+  if (index >= 0  &&  index < TIMEPROP_NUM_OUTPUTS)
+  {
+    timeprops[index].setPower( power, utc_time);
+  }
+}
+
 void Timeprop_Init()
 {
   snprintf_P(log_data, sizeof(log_data), "Timeprop Init");
