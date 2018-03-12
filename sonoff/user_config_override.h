@@ -36,22 +36,23 @@
 #define CFG_HOLDER           0x18030202   // yymmddnn  change this to force changes to be used immediately
 
 #define USE_PID         // include the pid feature (+?k)
-  #define PID_SETPOINT                  0       // setpoint
-  #define PID_PROPBAND                  5       // proportional band in process units (eg degrees)
-  #define PID_INTEGRAL_TIME             3600    // integral time seconds
-  #define PID_DERIVATIVE_TIME           0       // derivative time seconds
-  #define PID_INITIAL_INT               0.0     // initial integral value (0:1)
+  #define PID_SETPOINT                  50      // setpoint
+  #define PID_PROPBAND                  22      // proportional band in process units (eg degrees)
+  #define PID_INTEGRAL_TIME             24      // integral time seconds
+  #define PID_DERIVATIVE_TIME           6       // derivative time seconds
+  #define PID_INITIAL_INT               0.5     // initial integral value (0:1)
   #define PID_MAX_INTERVAL              300     // max expected time between pv updates (used to prevent integral windup)
   #define PID_DERIV_SMOOTH_FACTOR       0       // derivative smoothing factor
   #define PID_AUTO                      1       // initial state enabled (1) or disabled (2)
-  #define PID_MANUAL_POWER              0.25    // power output when loop is disabled
-  #define PID_UPDATE_SECS               20      // how often to run the pid algorithm (integer secs)
+  #define PID_MANUAL_POWER              0       // power output when loop is disabled
+  #define PID_UPDATE_SECS               5       // how often to run the pid algorithm (integer secs)
+  #define PID_USE_TIMPROP               1       // which timeprop settings to use (1 up), leave undefined if timeprop o/p not required
 
 
 #define USE_TIMEPROP    //  include the timeprop feature (+1.2k)
   // for single output
   #define TIMEPROP_NUM_OUTPUTS          1       // how many outputs to control (with separate alogorithm for each)
-  #define TIMEPROP_CYCLETIMES           60      // cycle time seconds
+  #define TIMEPROP_CYCLETIMES           20      // cycle time seconds
   #define TIMEPROP_DEADTIMES            0       // actuator action time seconds
   #define TIMEPROP_OPINVERTS            false   // whether to invert the output
   #define TIMEPROP_FALLBACK_POWERS      0       // falls back to this if too long betwen updates
