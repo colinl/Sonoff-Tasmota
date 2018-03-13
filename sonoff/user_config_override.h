@@ -33,7 +33,7 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x18031200   // yymmddnn  change this to force changes to be used immediately
+#define CFG_HOLDER           0x18031301   // yymmddnn  change this to force changes to be used immediately
 
 #define USE_PID         // include the pid feature (+?k)
   #define PID_SETPOINT                  50      // setpoint
@@ -45,8 +45,9 @@
   #define PID_DERIV_SMOOTH_FACTOR       0       // derivative smoothing factor
   #define PID_AUTO                      1       // initial state enabled (1) or disabled (2)
   #define PID_MANUAL_POWER              0       // power output when loop is disabled
-  #define PID_UPDATE_SECS               5       // how often to run the pid algorithm (integer secs)
+  #define PID_UPDATE_SECS               20      // how often to run the pid algorithm (integer secs)
   #define PID_USE_TIMPROP               1       // which timeprop settings to use (1 up), leave undefined if timeprop o/p not required
+  #define PID_USE_LOCAL_SENSOR                  // if defined then the local sensor will be used for pv. Comment this out if not required 
 
 
 #define USE_TIMEPROP    //  include the timeprop feature (+1.2k)
@@ -138,7 +139,7 @@
 #ifdef TELE_PERIOD
 #undef TELE_PERIOD
 #endif
-#define TELE_PERIOD            60               // [TelePeriod] Telemetry (0 = disable, 10 - 3600 seconds)
+#define TELE_PERIOD            20               // [TelePeriod] Telemetry (0 = disable, 10 - 3600 seconds)
 
 #ifdef FRIENDLY_NAME
 #undef FRIENDLY_NAME
@@ -149,6 +150,11 @@
 #undef APP_TIMEZONE
 #endif
 #define APP_TIMEZONE           0                 // [Timezone] UTC (-12 .. 12 = hours from UTC, 99 = use TIME_DST/TIME_STD)
+
+#if defined TEMP_RESOLUTION
+#undef TEMP_RESOLUTION
+#endif
+#define TEMP_RESOLUTION        3                  // 3 dec digits in temperature
 
 // Unneeded extras
 
