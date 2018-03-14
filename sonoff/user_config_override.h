@@ -33,21 +33,21 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x18031301   // yymmddnn  change this to force changes to be used immediately
+#define CFG_HOLDER           0x18031405   // yymmddnn  change this to force changes to be used immediately
 
 #define USE_PID         // include the pid feature (+?k)
-  #define PID_SETPOINT                  50      // setpoint
-  #define PID_PROPBAND                  22      // proportional band in process units (eg degrees)
-  #define PID_INTEGRAL_TIME             24      // integral time seconds
-  #define PID_DERIVATIVE_TIME           6       // derivative time seconds
+  #define PID_SETPOINT                  9.5    // setpoint
+  #define PID_PROPBAND                  1       // proportional band in process units (eg degrees)
+  #define PID_INTEGRAL_TIME             300     // integral time seconds
+  #define PID_DERIVATIVE_TIME           30      // derivative time seconds
   #define PID_INITIAL_INT               0.5     // initial integral value (0:1)
-  #define PID_MAX_INTERVAL              300     // max expected time between pv updates (used to prevent integral windup)
-  #define PID_DERIV_SMOOTH_FACTOR       0       // derivative smoothing factor
+  #define PID_MAX_INTERVAL              300     // max expected time between pv updates (used to fall back to safe power)
+  #define PID_DERIV_SMOOTH_FACTOR       3       // derivative smoothing factor
   #define PID_AUTO                      1       // initial state enabled (1) or disabled (2)
   #define PID_MANUAL_POWER              0       // power output when loop is disabled
-  #define PID_UPDATE_SECS               20      // how often to run the pid algorithm (integer secs)
+  #define PID_UPDATE_SECS               10       // how often to run the pid algorithm (integer secs) - set to 0 to run each time a pv is available
   #define PID_USE_TIMPROP               1       // which timeprop settings to use (1 up), leave undefined if timeprop o/p not required
-  #define PID_USE_LOCAL_SENSOR                  // if defined then the local sensor will be used for pv. Comment this out if not required 
+  #define PID_USE_LOCAL_SENSOR                  // if defined then the local sensor will be used for pv. Comment this out if not required
 
 
 #define USE_TIMEPROP    //  include the timeprop feature (+1.2k)
@@ -74,12 +74,12 @@
 #ifdef WIFI_IP_ADDRESS
 #undef WIFI_IP_ADDRESS
 #endif
-#define WIFI_IP_ADDRESS      "192.168.49.95"
+#define WIFI_IP_ADDRESS      "192.168.50.95"
 
 #ifdef WIFI_GATEWAY
 #undef WIFI_GATEWAY
 #endif
-#define WIFI_GATEWAY         "192.168.49.1"
+#define WIFI_GATEWAY         "192.168.50.1"
 
 #ifdef WIFI_SUBNETMASK
 #undef WIFI_SUBNETMASK
@@ -94,17 +94,22 @@
 #ifdef STA_SSID1
 #undef STA_SSID1
 #endif
-#define STA_SSID1            "RedKite"
+#define STA_SSID1            "pi02"
 
 #ifdef STA_PASS1
 #undef STA_PASS1
 #endif
 #define STA_PASS1            "ladycaroline"
 
+#ifdef OTA_URL
+#undef OTA_URL
+#endif
+#define OTA_URL               "http://192.168.49.92:1880/sonoff/firmware.bin"
+
 #ifdef MQTT_HOST
 #undef MQTT_HOST
 #endif
-#define MQTT_HOST            "192.168.49.83"                // owl2
+#define MQTT_HOST            "192.168.49.85"                // pi02
 
 #ifdef MQTT_USER
 #undef MQTT_USER
@@ -129,7 +134,7 @@
 #ifdef MQTT_FULLTOPIC
 #undef MQTT_FULLTOPIC
 #endif
-#define MQTT_FULLTOPIC         "tydwr/location/%topic%/%prefix%/" // [FullTopic] Subscribe and Publish full topic name
+#define MQTT_FULLTOPIC         "tydwr/conservatory/%topic%/%prefix%/" // [FullTopic] Subscribe and Publish full topic name
 
 #ifdef MQTT_TOPIC
 #undef MQTT_TOPIC
@@ -139,7 +144,7 @@
 #ifdef TELE_PERIOD
 #undef TELE_PERIOD
 #endif
-#define TELE_PERIOD            20               // [TelePeriod] Telemetry (0 = disable, 10 - 3600 seconds)
+#define TELE_PERIOD            10               // [TelePeriod] Telemetry (0 = disable, 10 - 3600 seconds)
 
 #ifdef FRIENDLY_NAME
 #undef FRIENDLY_NAME
