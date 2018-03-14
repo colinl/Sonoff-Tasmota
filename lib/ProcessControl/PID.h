@@ -79,7 +79,7 @@ private:
 
 
   unsigned char m_initialised;
-  unsigned long m_lastPvUpdateTime;   // the time of last pv update secs
+  unsigned long m_last_pv_update_time;   // the time of last pv update secs
   unsigned long m_last_sample_time;   // the time of the last tick() run
   double m_smoothed_value;
   double m_integral;
