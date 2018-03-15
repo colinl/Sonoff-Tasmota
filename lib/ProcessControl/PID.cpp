@@ -20,13 +20,6 @@
 
 #include "PID.h"
 
-extern void AddLog(unsigned char loglevel);
-extern char log_data[400];
-extern void snprintf_P(char*, unsigned int, char const*, ...);
-extern char* dtostrfd(double number, unsigned char prec, char *s);
-enum LoggingLevels {LOG_LEVEL_NONE, LOG_LEVEL_ERROR, LOG_LEVEL_INFO, LOG_LEVEL_DEBUG, LOG_LEVEL_DEBUG_MORE, LOG_LEVEL_ALL};
-char buf[10];
-
 PID::PID() {
   m_initialised = 0;
   m_last_sample_time = 0;
@@ -57,28 +50,18 @@ double PID::tick( unsigned long nowSecs ) {
   unsigned char integral_locked = 0;
   double factor;
   if (m_initialised && m_last_pv_update_time) {
-    snprintf_P(log_data, sizeof(log_data), "Initialised and pv");
-    AddLog(LOG_LEVEL_INFO);
     // we have been initialised and have been given a pv value
     // check whether too long has elapsed since pv was last updated
     if (m_max_interval > 0  &&  nowSecs - m_last_pv_update_time > m_max_interval) {
       // yes, too long has elapsed since last PV update so go to fallback power
-      snprintf_P(log_data, sizeof(log_data), "Too long since PV update, fallback to manual op setting");
-      AddLog(LOG_LEVEL_INFO);
       power = m_manual_op;
     } else {
       // is this the first time through here?
       if (m_last_sample_time) {
-        snprintf_P(log_data, sizeof(log_data), "Not first time");
-        AddLog(LOG_LEVEL_INFO);
         // not first time
         unsigned long delta_t = nowSecs - m_last_sample_time;  // seconds
-          snprintf_P(log_data, sizeof(log_data), "delta_t: %d", delta_t);
-          AddLog(LOG_LEVEL_INFO);
         if (delta_t <= 0 || delta_t > m_max_interval) {
           // too long since last sample so leave integral as is and set deriv to zero
-            snprintf_P(log_data, sizeof(log_data), "Too long");
-            AddLog(LOG_LEVEL_INFO);
           m_derivative = 0;
         } else {
           if (m_smooth_factor > 0) {
@@ -90,25 +73,13 @@ double PID::tick( unsigned long nowSecs ) {
             // no integral smoothing so factor is 1, this makes smoothed_value the previous pv
             factor = 1.0;
           }
-          dtostrfd(factor, 2, buf);
-          snprintf_P(log_data, sizeof(log_data), "factor: %s", buf);
-          AddLog(LOG_LEVEL_INFO);
           double delta_v = (m_pv - m_smoothed_value) * factor;
           m_smoothed_value = m_smoothed_value + delta_v;
           m_derivative = m_t_derivative * delta_v/delta_t;
-          dtostrfd(m_smoothed_value, 2, buf);
-          snprintf_P(log_data, sizeof(log_data), "m_smoothed_value: %s", buf);
-          AddLog(LOG_LEVEL_INFO);
-          dtostrfd(m_derivative, 2, buf);
-          snprintf_P(log_data, sizeof(log_data), "m_derivative: %s", buf);
-          AddLog(LOG_LEVEL_INFO);
           // lock the integral if abs(previous integral + error) > prop_band/2
           // as this means that P + I is outside the linear region so power will be 0 or full
           // also lock if control is disabled
           double error = m_pv - m_setpoint;
-          dtostrfd(error, 2, buf);
-          snprintf_P(log_data, sizeof(log_data), "error: %s", buf);
-          AddLog(LOG_LEVEL_INFO);
           double pbo2 = m_prop_band/2.0;
           double epi = error + m_integral;
           if (epi < 0.0) epi = -epi;    // abs value of error + m_integral
@@ -121,14 +92,8 @@ double PID::tick( unsigned long nowSecs ) {
             } else if (m_integral > pbo2) {
               m_integral = pbo2;
             }
-          } else {
-            snprintf_P(log_data, sizeof(log_data), "integral locked");
-            AddLog(LOG_LEVEL_INFO);
             integral_locked = 1;
           }
-          dtostrfd(m_integral, 2, buf);
-          snprintf_P(log_data, sizeof(log_data), "m_integral: %s", buf);
-          AddLog(LOG_LEVEL_INFO);
         }
 
       } else {
@@ -137,19 +102,10 @@ double PID::tick( unsigned long nowSecs ) {
         // setup the integral term so that the power out would be integral_default if pv=setpoint
         m_integral = (0.5 - m_integral_default)*m_prop_band;
         m_derivative = 0.0;
-        dtostrfd(m_integral, 2, buf);
-        snprintf_P(log_data, sizeof(log_data), "First time m_integral: %s", buf);
-        AddLog(LOG_LEVEL_INFO);
       }
 
       double proportional = m_pv - m_setpoint;
-      dtostrfd(proportional, 2, buf);
-      snprintf_P(log_data, sizeof(log_data), "proportional: %s", buf);
-      AddLog(LOG_LEVEL_INFO);
       power = -1.0/m_prop_band * (proportional + m_integral + m_derivative) + 0.5;
-      dtostrfd(power, 2, buf);
-      snprintf_P(log_data, sizeof(log_data), "power: %s", buf);
-      AddLog(LOG_LEVEL_INFO);
       if (power < 0.0) {
         power = 0.0;
       } else if (power > 1.0) {
@@ -163,8 +119,6 @@ double PID::tick( unsigned long nowSecs ) {
     }
   } else {
     // not yet initialised or no pv value yet so set power to disabled value
-    snprintf_P(log_data, sizeof(log_data), "PID not yet initialised or no pv");
-    AddLog(LOG_LEVEL_INFO);
     power = m_manual_op;
   }
   return power;
