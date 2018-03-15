@@ -67,7 +67,7 @@ public:
   void setPower( float power, unsigned long nowSecs );
 
   /* called regularly to provide new output value */
-  /* returns new o/p state 0, 1 or -1 to leave as is */
+  /* returns new o/p state 0, 1 */
   int tick(unsigned long nowSecs);
 
 private:

@@ -90,6 +90,7 @@ const char kTimepropCommands[] PROGMEM = D_CMND_TIMEPROP_SETPOWER;
 
 static Timeprop timeprops[TIMEPROP_NUM_OUTPUTS];
 static int relayNos[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_RELAYS};
+static long currentRelayStates = 0;  // current actual relay states. Bit 0 first relay
 
 /* call this from elsewhere if required to set the power value for one of the timeprop instances */
 /* index specifies which one, 0 up */
@@ -120,10 +121,18 @@ void Timeprop_Init()
 void Timeprop_Every_Second() {
   for (int i=0; i<TIMEPROP_NUM_OUTPUTS; i++) {
     int newState = timeprops[i].tick(utc_time);
-    if (newState != -1) {   // -1 means leave as is
+    if (newState != bitRead(currentRelayStates, relayNos[i]-1)){
       ExecuteCommandPower(relayNos[i], newState);
     }
   }
+}
+
+// called by the system each time a relay state is changed
+void Timeprop_Xdrv_Power() {
+  // for a single relay the state is in the lsb of index, I have think that for
+  // multiple outputs then succesive bits will hold the state but have not been
+  // able to test that
+  currentRelayStates = XdrvMailbox.index;
 }
 
 /* struct XDRVMAILBOX { */
@@ -200,6 +209,9 @@ boolean Xdrv91(byte function)
     break;
   case FUNC_COMMAND:
     result = Timeprop_Command();
+    break;
+  case FUNC_SET_POWER:
+    Timeprop_Xdrv_Power();
     break;
   }
   return result;
