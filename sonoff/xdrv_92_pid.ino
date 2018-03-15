@@ -70,17 +70,7 @@ void PID_Init()
 void PID_Every_Second() {
   static int sec_counter = 0;
   if (sec_counter++ % update_secs  ==  0) {
-    snprintf_P(log_data, sizeof(log_data), "Calling PID::tick()");
-    AddLog(LOG_LEVEL_INFO);
-    //float t;
-    //Ds18b20Read(t);
-    //snprintf_P(log_data, sizeof(log_data), "Ds18b20Read * 1000: %d", t*1000);
-    //AddLog(LOG_LEVEL_INFO);
     double power = pid.tick(utc_time);
-    char buf[10];
-    dtostrfd(power, 3, buf);
-    snprintf_P(log_data, sizeof(log_data), "Power from PID::tick(): %s", buf);
-    AddLog(LOG_LEVEL_INFO);
     snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"%s\":\"%s\"}"), "power", buf);
     MqttPublishPrefixTopic_P(TELE, "PID", false);
 #if defined PID_USE_TIMPROP
