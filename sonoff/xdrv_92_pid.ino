@@ -71,6 +71,8 @@ void PID_Every_Second() {
   static int sec_counter = 0;
   if (sec_counter++ % update_secs  ==  0) {
     double power = pid.tick(utc_time);
+    char buf[10];
+    dtostrfd(power, 3, buf);
     snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"%s\":\"%s\"}"), "power", buf);
     MqttPublishPrefixTopic_P(TELE, "PID", false);
 #if defined PID_USE_TIMPROP
