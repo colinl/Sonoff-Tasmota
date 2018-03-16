@@ -37,15 +37,15 @@
 
 #define USE_PID         // include the pid feature (+?k)
   #define PID_SETPOINT                  9.5    // setpoint
-  #define PID_PROPBAND                  1       // proportional band in process units (eg degrees)
-  #define PID_INTEGRAL_TIME             300     // integral time seconds
-  #define PID_DERIVATIVE_TIME           30      // derivative time seconds
+  #define PID_PROPBAND                  0.5     // proportional band in process units (eg degrees)
+  #define PID_INTEGRAL_TIME             80      // integral time seconds
+  #define PID_DERIVATIVE_TIME           15      // derivative time seconds
   #define PID_INITIAL_INT               0.5     // initial integral value (0:1)
   #define PID_MAX_INTERVAL              300     // max expected time between pv updates (used to fall back to safe power)
   #define PID_DERIV_SMOOTH_FACTOR       3       // derivative smoothing factor
   #define PID_AUTO                      1       // initial state enabled (1) or disabled (2)
   #define PID_MANUAL_POWER              0       // power output when loop is disabled
-  #define PID_UPDATE_SECS               5      // how often to run the pid algorithm (integer secs)
+  #define PID_UPDATE_SECS               2       // how often to run the pid algorithm (integer secs)
   #define PID_USE_TIMPROP               1       // which timeprop settings to use (1 up), leave undefined if timeprop o/p not required
   #define PID_USE_LOCAL_SENSOR                  // if defined then the local sensor will be used for pv. Comment this out if not required
 
