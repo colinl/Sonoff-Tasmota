@@ -33,7 +33,21 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x18030501   // yymmddnn  change this to force changes to be used immediately
+#define CFG_HOLDER           0x18031900   // yymmddnn  change this to force changes to be used immediately
+
+#define USE_PID         // include the pid feature (+?k)
+  #define PID_SETPOINT                  3.1    // setpoint
+  #define PID_PROPBAND                  1.0     // proportional band in process units (eg degrees)
+  #define PID_INTEGRAL_TIME             1800     // integral time seconds
+  #define PID_DERIVATIVE_TIME           0       // derivative time seconds
+  #define PID_INITIAL_INT               0.1     // initial integral value (0:1)
+  #define PID_MAX_INTERVAL              300     // max expected time between pv updates (used to fall back to safe power)
+  #define PID_DERIV_SMOOTH_FACTOR       3       // derivative smoothing factor
+  #define PID_AUTO                      1       // initial state enabled (1) or disabled (2)
+  #define PID_MANUAL_POWER              0       // power output when loop is disabled
+  #define PID_UPDATE_SECS               5       // how often to run the pid algorithm (integer secs)
+  #define PID_USE_TIMPROP               1       // which timeprop settings to use (1 up), leave undefined if timeprop o/p not required
+  #define PID_USE_LOCAL_SENSOR                  // if defined then the local sensor will be used for pv. Comment this out if not required
 
 #define USE_TIMEPROP    //  include the timeprop feature (+1.2k)
   // for single output
@@ -95,6 +109,11 @@
 #undef STA_PASS2
 #endif
 #define STA_PASS2            ""
+
+#ifdef OTA_URL
+#undef OTA_URL
+#endif
+#define OTA_URL               "http://192.168.49.92:1880/sonoff/firmware.bin"
 
 #ifdef SYS_LOG_HOST
 #undef SYS_LOG_HOST
