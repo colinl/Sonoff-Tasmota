@@ -33,7 +33,7 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x18031405   // yymmddnn  change this to force changes to be used immediately
+#define CFG_HOLDER           0x18032000   // yymmddnn  change this to force changes to be used immediately
 
 #define USE_PID         // include the pid feature (+?k)
   #define PID_SETPOINT                  9.5    // setpoint
@@ -45,7 +45,7 @@
   #define PID_DERIV_SMOOTH_FACTOR       3       // derivative smoothing factor
   #define PID_AUTO                      1       // initial state enabled (1) or disabled (2)
   #define PID_MANUAL_POWER              0       // power output when loop is disabled
-  #define PID_UPDATE_SECS               5       // how often to run the pid algorithm (integer secs)
+  #define PID_UPDATE_SECS               0       // how often to run the pid algorithm (integer secs) 0 to run for each new pv value
   #define PID_USE_TIMPROP               1       // which timeprop settings to use (1 up), leave undefined if timeprop o/p not required
   #define PID_USE_LOCAL_SENSOR                  // if defined then the local sensor will be used for pv. Comment this out if not required
 
