@@ -93,7 +93,9 @@
                                                  // between process values
                                                  // May be adjusted via MQTT using cmnd pid_manual_power
 
-   #define PID_UPDATE_SECS               15      // How often to run the pid algorithm (integer secs).  Set this to a time
+   #define PID_UPDATE_SECS               0       // How often to run the pid algorithm (integer secs) or 0 to run the algorithm
+                                                 // each time a new pv value is received, for most applictions specify 0.
+                                                 // Otherwise set this to a time
                                                  // that is short compared to the response of the process.  For example,
                                                  // something like 15 seconds may well be appropriate for a domestic room
                                                  // heating application.
@@ -146,7 +148,10 @@ const char kPIDCommands[] PROGMEM = D_CMND_PID_SETPV "|" D_CMND_PID_SETSETPOINT 
   D_CMND_PID_SETAUTO "|" D_CMND_PID_SETMANUAL_POWER "|" D_CMND_PID_SETMAX_INTERVAL "|" D_CMND_PID_SETUPDATE_SECS;
 
 static PID pid;
-static int update_secs = PID_UPDATE_SECS <= 0  ?  1  :  PID_UPDATE_SECS;   // how often (secs) the pid alogorithm is run
+static int update_secs = PID_UPDATE_SECS <= 0  ?  0  :  PID_UPDATE_SECS;   // how often (secs) the pid alogorithm is run
+static int max_interval = PID_MAX_INTERVAL;
+static unsigned long last_pv_update_secs = 0;
+static boolean run_pid_now = false;     // tells PID_Every_Second to run the pid algorithm
 
 void PID_Init()
 {
@@ -158,16 +163,11 @@ void PID_Init()
 
 void PID_Every_Second() {
   static int sec_counter = 0;
-  if (sec_counter++ % update_secs  ==  0) {
-    double power = pid.tick(utc_time);
-    char buf[10];
-    dtostrfd(power, 3, buf);
-    snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"%s\":\"%s\"}"), "power", buf);
-    MqttPublishPrefixTopic_P(TELE, "PID", false);
-#if defined PID_USE_TIMPROP
-      // send power to appropriate timeprop output
-      Timeprop_Set_Power( PID_USE_TIMPROP-1, power );
-#endif // PID_USE_TIMPROP
+  // run the pid algorithm if run_pid_now is true or if the right number of seconds has passed or if too long has
+  // elapsed since last pv update. If too long has elapsed the the algorithm will deal with that.
+  if (run_pid_now  ||  utc_time - last_pv_update_secs > max_interval  ||  (update_secs != 0 && sec_counter++ % update_secs  ==  0)) {
+    run_pid();
+    run_pid_now = false;
   }
 }
 
@@ -188,7 +188,13 @@ void PID_Show_Sensor() {
       snprintf_P(log_data, sizeof(log_data), "PID_Show_Sensor: Temperature: %s", value);
       AddLog(LOG_LEVEL_INFO);
       // pass the value to the pid alogorithm to use as current pv
-      pid.setPv(atof(value), utc_time);
+      last_pv_update_secs = utc_time;
+      pid.setPv(atof(value), last_pv_update_secs);
+      // also trigger running the pid algorithm if we have been told to run it each pv sample
+      if (update_secs == 0) {
+        // this runs it at the next second
+        run_pid_now = true;
+      }
     } else {
       snprintf_P(log_data, sizeof(log_data), "PID_Show_Sensor - no temperature found");
       AddLog(LOG_LEVEL_INFO);
@@ -210,7 +216,6 @@ void PID_Show_Sensor() {
 /*   char         *data; */
 /* } XdrvMailbox; */
 
-// To get here post with topic cmnd/timeprop_setpower_n where n is index into timeprops 0:7
 boolean PID_Command()
 {
   char command [CMDSZ];
@@ -218,7 +223,7 @@ boolean PID_Command()
   uint8_t ua_prefix_len = strlen(D_CMND_PID); // to detect prefix of command
 
   snprintf_P(log_data, sizeof(log_data), "Command called: "
-    "index: %d data_len: %d payload: %d topic: %s data: %s\n",
+    "index: %d data_len: %d payload: %d topic: %s data: %s",
     XdrvMailbox.index,
     XdrvMailbox.data_len,
     XdrvMailbox.payload,
@@ -228,17 +233,19 @@ boolean PID_Command()
 
   if (0 == strncasecmp_P(XdrvMailbox.topic, PSTR(D_CMND_PID), ua_prefix_len)) {
     // command starts with pid_
-    snprintf_P(log_data, sizeof(log_data), "PID command");
-    AddLog(LOG_LEVEL_INFO);
     int command_code = GetCommandCode(command, sizeof(command), XdrvMailbox.topic + ua_prefix_len, kPIDCommands);
-    snprintf_P(log_data, sizeof(log_data), "PID command code: %d", command_code);
-    AddLog(LOG_LEVEL_INFO);
     serviced = true;
     switch (command_code) {
       case CMND_PID_SETPV:
         snprintf_P(log_data, sizeof(log_data), "PID command setpv");
         AddLog(LOG_LEVEL_INFO);
-        pid.setPv(atof(XdrvMailbox.data), utc_time);
+        last_pv_update_secs = utc_time;
+        pid.setPv(atof(XdrvMailbox.data), last_pv_update_secs);
+        // also trigger running the pid algorithm if we have been told to run it each pv sample
+        if (update_secs == 0) {
+          // this runs it at the next second
+          run_pid_now = true;
+        }
         break;
 
       case CMND_PID_SETSETPOINT:
@@ -292,14 +299,15 @@ boolean PID_Command()
       case CMND_PID_SETMAX_INTERVAL:
       snprintf_P(log_data, sizeof(log_data), "PID command set max interval");
       AddLog(LOG_LEVEL_INFO);
-      pid.setMaxInterval(atoi(XdrvMailbox.data)) ;
+      max_interval = atoi(XdrvMailbox.data);
+      pid.setMaxInterval(max_interval);
       break;
 
       case CMND_PID_SETUPDATE_SECS:
         snprintf_P(log_data, sizeof(log_data), "PID command set update secs");
         AddLog(LOG_LEVEL_INFO);
         update_secs = atoi(XdrvMailbox.data) ;
-        if (update_secs <= 0) update_secs = 1;
+        if (update_secs < 0) update_secs = 0;
         break;
 
       default:
@@ -315,6 +323,19 @@ boolean PID_Command()
     serviced = false;
   }
   return serviced;
+}
+
+static void run_pid()
+{
+  double power = pid.tick(utc_time);
+  char buf[10];
+  dtostrfd(power, 3, buf);
+  snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"%s\":\"%s\"}"), "power", buf);
+  MqttPublishPrefixTopic_P(TELE, "PID", false);
+#if defined PID_USE_TIMPROP
+    // send power to appropriate timeprop output
+    Timeprop_Set_Power( PID_USE_TIMPROP-1, power );
+#endif // PID_USE_TIMPROP
 }
 
 /*********************************************************************************************\
