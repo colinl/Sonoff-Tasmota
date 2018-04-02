@@ -33,7 +33,7 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x18031900   // yymmddnn  change this to force changes to be used immediately
+#define CFG_HOLDER           0x18040200   // yymmddnn  change this to force changes to be used immediately
 
 #define USE_PID         // include the pid feature (+?k)
   #define PID_SETPOINT                  3.1    // setpoint
@@ -169,6 +169,11 @@
 #undef APP_TIMEZONE
 #endif
 #define APP_TIMEZONE           0                 // [Timezone] UTC (-12 .. 12 = hours from UTC, 99 = use TIME_DST/TIME_STD)
+
+#ifdef TEMP_RESOLUTION
+#undef TEMP_RESOLUTION
+#endif
+#define TEMP_RESOLUTION        3                 // [TempRes] Maximum number of decimals (0 - 3) showing sensor Temperature
 
 // Unneeded extras
 
