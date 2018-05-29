@@ -95,6 +95,10 @@
 #endif
 #define WIFI_DNS             "192.168.43.1"
 
+#undef WIFI_CONFIG_TOOL
+#define WIFI_CONFIG_TOOL       WIFI_WAIT    // [WifiConfig] just wait for re-connection if no wifi
+                                            //   (WIFI_RESTART, WIFI_SMARTCONFIG, WIFI_MANAGER, WIFI_WPSCONFIG, WIFI_RETRY, WIFI_WAIT)
+
 #ifdef STA_SSID1
 #undef STA_SSID1
 #endif
