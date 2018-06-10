@@ -48,12 +48,12 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x18052900   // yymmddnn  change this to force changes to be used immediately
+#define CFG_HOLDER           0x18061000   // yymmddnn  change this to force changes to be used immediately
 
 #define USE_PID         // include the pid feature (+?k)
   #define PID_SETPOINT                  20.0    // setpoint
   #define PID_PROPBAND                  1.0     // proportional band in process units (eg degrees)
-  #define PID_INTEGRAL_TIME             600     // integral time seconds
+  #define PID_INTEGRAL_TIME             1800    // integral time seconds
   #define PID_DERIVATIVE_TIME           0       // derivative time seconds
   #define PID_INITIAL_INT               0.5     // initial integral value (0:1)
   #define PID_MAX_INTERVAL              1200    // max expected time between pv updates (used to fall back to safe power)
@@ -68,7 +68,7 @@
 #define USE_TIMEPROP    //  include the timeprop feature (+1.2k)
   // for single output
   #define TIMEPROP_NUM_OUTPUTS          1       // how many outputs to control (with separate alogorithm for each)
-  #define TIMEPROP_CYCLETIMES           600      // cycle time seconds
+  #define TIMEPROP_CYCLETIMES           300     // cycle time seconds
   #define TIMEPROP_DEADTIMES            0       // actuator action time seconds
   #define TIMEPROP_OPINVERTS            false   // whether to invert the output
   #define TIMEPROP_FALLBACK_POWERS      0       // falls back to this if too long betwen updates
