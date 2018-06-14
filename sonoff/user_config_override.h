@@ -110,6 +110,11 @@
 #endif
 #define STA_PASS2            ""
 
+#ifdef WIFI_CONFIG_TOOL
+#undef WIFI_CONFIG_TOOL
+#endif
+#define WIFI_CONFIG_TOOL      WIFI_WAIT    // If wifi doesn't connect just carry on
+
 #ifdef OTA_URL
 #undef OTA_URL
 #endif
