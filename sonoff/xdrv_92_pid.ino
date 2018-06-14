@@ -184,7 +184,7 @@ void PID_Show_Sensor() {
   if (data_json.success()) {
     const char* value = data_json["DS18B20"]["Temperature"];
     // check that something was found and it contains a number
-    if (value != NULL  &&  strlen(value) > 0  &&  isdigit(value[0]) ) {
+    if (value != NULL && strlen(value) > 0 && (isdigit(value[0]) || (value[0] == '-' && isdigit(value[1])) ) ) {
       snprintf_P(log_data, sizeof(log_data), "PID_Show_Sensor: Temperature: %s", value);
       AddLog(LOG_LEVEL_INFO);
       // pass the value to the pid alogorithm to use as current pv
