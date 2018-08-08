@@ -52,8 +52,8 @@
 
 #define USE_PID         // include the pid feature (+?k)
   #define PID_SETPOINT                  20.0    // setpoint
-  #define PID_PROPBAND                  1.0     // proportional band in process units (eg degrees)
-  #define PID_INTEGRAL_TIME             1800    // integral time seconds
+  #define PID_PROPBAND                  2.25    // proportional band in process units (eg degrees)
+  #define PID_INTEGRAL_TIME             1200    // integral time seconds
   #define PID_DERIVATIVE_TIME           0       // derivative time seconds
   #define PID_INITIAL_INT               0.5     // initial integral value (0:1)
   #define PID_MAX_INTERVAL              1200    // max expected time between pv updates (used to fall back to safe power)
