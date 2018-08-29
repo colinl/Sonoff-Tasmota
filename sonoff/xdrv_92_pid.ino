@@ -176,8 +176,8 @@ void PID_Show_Sensor() {
   // as published in tele/SENSOR
   // Update period is specified in TELE_PERIOD
   // e.g. "{"Time":"2018-03-13T16:48:05","DS18B20":{"Temperature":22.0},"TempUnit":"C"}"
-  snprintf_P(log_data, sizeof(log_data), "PID_Show_Sensor: mqtt_data: %s", mqtt_data);
-  AddLog(LOG_LEVEL_INFO);
+  //snprintf_P(log_data, sizeof(log_data), "PID_Show_Sensor: mqtt_data: %s", mqtt_data);
+  //AddLog(LOG_LEVEL_INFO);
   StaticJsonBuffer<400> jsonBuffer;
   // force mqtt_data to read only to stop parse from overwriting it
   JsonObject& data_json = jsonBuffer.parseObject((const char*)mqtt_data);
@@ -185,8 +185,8 @@ void PID_Show_Sensor() {
     const char* value = data_json["DS18B20"]["Temperature"];
     // check that something was found and it contains a number
     if (value != NULL && strlen(value) > 0 && (isdigit(value[0]) || (value[0] == '-' && isdigit(value[1])) ) ) {
-      snprintf_P(log_data, sizeof(log_data), "PID_Show_Sensor: Temperature: %s", value);
-      AddLog(LOG_LEVEL_INFO);
+      //snprintf_P(log_data, sizeof(log_data), "PID_Show_Sensor: Temperature: %s", value);
+      //AddLog(LOG_LEVEL_INFO);
       // pass the value to the pid alogorithm to use as current pv
       last_pv_update_secs = utc_time;
       pid.setPv(atof(value), last_pv_update_secs);
