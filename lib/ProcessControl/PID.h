@@ -76,6 +76,7 @@ private:
   unsigned char m_mode_auto;
   double m_manual_op;
   int m_max_interval;
+  double m_last_power;
 
 
   unsigned char m_initialised;
