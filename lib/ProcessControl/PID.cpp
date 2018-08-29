@@ -24,6 +24,7 @@ PID::PID() {
   m_initialised = 0;
   m_last_sample_time = 0;
   m_last_pv_update_time = 0;
+  m_last_power = 0.0;
 }
 
 void PID::initialise( double setpoint, double prop_band, double t_integral, double t_derivative,
@@ -47,7 +48,6 @@ void PID::initialise( double setpoint, double prop_band, double t_integral, doub
 /* called regularly to calculate and return new power value */
 double PID::tick( unsigned long nowSecs ) {
   double power;
-  unsigned char integral_locked = 0;
   double factor;
   if (m_initialised && m_last_pv_update_time) {
     // we have been initialised and have been given a pv value
@@ -84,15 +84,25 @@ double PID::tick( unsigned long nowSecs ) {
           double epi = error + m_integral;
           if (epi < 0.0) epi = -epi;    // abs value of error + m_integral
           if (epi < pbo2  && m_mode_auto) {
-            integral_locked = 0;
-            m_integral = m_integral + error * delta_t/m_t_integral;
-            // clamp to +- 0.5 prop band widths so that it cannot push the zero power point outside the pb
-            if ( m_integral < -pbo2 ) {
-              m_integral = -pbo2;
-            } else if (m_integral > pbo2) {
-              m_integral = pbo2;
+            if (m_t_integral <= 0) {
+              // t_integral is zero (or silly), set integral to one end or the other
+              // or half way if exactly on sp
+              if (error > 0.0) {
+                m_integral = pbo2;
+              } else if (error < 0) {
+                m_integral = -pbo2;
+              } else {
+                m_integral = 0.0;
+              }
+            } else {
+              m_integral = m_integral + error * delta_t/m_t_integral;
+              // clamp to +- 0.5 prop band widths so that it cannot push the zero power point outside the pb
+              if ( m_integral < -pbo2 ) {
+                m_integral = -pbo2;
+              } else if (m_integral > pbo2) {
+                m_integral = pbo2;
+              }
             }
-            integral_locked = 1;
           }
         }
 
@@ -105,11 +115,19 @@ double PID::tick( unsigned long nowSecs ) {
       }
 
       double proportional = m_pv - m_setpoint;
-      power = -1.0/m_prop_band * (proportional + m_integral + m_derivative) + 0.5;
-      if (power < 0.0) {
-        power = 0.0;
-      } else if (power > 1.0) {
-        power = 1.0;
+      if (m_prop_band == 0) {
+        // prop band is zero so drop back to on/off control with zero hysteresis
+        if (proportional > 0.0) {
+          power = 0.0;
+        } else if (proportional < 0.0) {
+          power = 1.0;
+        } else {
+          // exactly on sp so leave power as it was last time round
+          power = m_last_power;
+        }
+      }
+      else {
+        power = -1.0/m_prop_band * (proportional + m_integral + m_derivative) + 0.5;
       }
       // set power to disabled value if the loop is not enabled
       if (!m_mode_auto) {
@@ -121,6 +139,12 @@ double PID::tick( unsigned long nowSecs ) {
     // not yet initialised or no pv value yet so set power to disabled value
     power = m_manual_op;
   }
+  if (power < 0.0) {
+    power = 0.0;
+  } else if (power > 1.0) {
+    power = 1.0;
+  }
+  m_last_power = power;
   return power;
 }
 
