@@ -7,8 +7,10 @@
 .piolibdeps
 .clang_complete
 .gcc-flags.json
-sonoff/user_config_override.h
+firmware.map
+#sonoff/user_config_override.h
 build
+
 
 ## Visual Studio Code specific ######
 .vscode
