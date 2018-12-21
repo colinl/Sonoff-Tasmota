@@ -45,7 +45,7 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x19121803   // yymmddnn  change this to force changes to be used immediately
+#define CFG_HOLDER           0x19122101   // yymmddnn  change this to force changes to be used immediately
 
 #ifdef MODULE
 #undef MODULE
@@ -101,6 +101,11 @@
 #undef MQTT_PASS
 #endif
 #define MQTT_PASS            ""
+
+#ifdef MQTT_POWER_RETAIN
+#undef MQTT_POWER_RETAIN
+#endif
+#define MQTT_POWER_RETAIN      1                 // [PowerRetain] Power status message may send retain flag (0 = off, 1 = on)
 
 #ifdef MQTT_STATUS_OFF
 #undef MQTT_STATUS_OFF
