@@ -45,7 +45,7 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x19122101   // yymmddnn  change this to force changes to be used immediately
+#define CFG_HOLDER           0x19123001   // yymmddnn  change this to force changes to be used immediately
 
 #ifdef MODULE
 #undef MODULE
@@ -150,7 +150,7 @@
 # if defined KEY_HOLD_TIME
 #undef KEY_HOLD_TIME
 #endif
-#define KEY_HOLD_TIME          20                // [SetOption32] Number of 0.1 seconds to hold Button or external Pushbutton before sending HOLD message
+#define KEY_HOLD_TIME          10                // [SetOption32] Number of 0.1 seconds to hold Button or external Pushbutton before sending HOLD message
 
 // Unneeded extras
 
