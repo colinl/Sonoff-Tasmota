@@ -45,7 +45,7 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x18121801   // yymmddnn  change this to force changes to be used immediately
+#define CFG_HOLDER           0x18123002   // yymmddnn  change this to force changes to be used immediately
 
 #ifdef MODULE
 #undef MODULE
@@ -125,7 +125,7 @@
 #ifdef TELE_PERIOD
 #undef TELE_PERIOD
 #endif
-#define TELE_PERIOD            10               // [TelePeriod] Telemetry (0 = disable, 10 - 3600 seconds)
+#define TELE_PERIOD            60               // [TelePeriod] Telemetry (0 = disable, 10 - 3600 seconds)
 
 #ifdef FRIENDLY_NAME
 #undef FRIENDLY_NAME
@@ -141,6 +141,11 @@
 #undef TEMP_RESOLUTION
 #endif
 #define TEMP_RESOLUTION        3                  // 3 dec digits in temperature
+
+# if defined KEY_HOLD_TIME
+#undef KEY_HOLD_TIME
+#endif
+#define KEY_HOLD_TIME          10                // [SetOption32] Number of 0.1 seconds to hold Button or external Pushbutton before sending HOLD message
 
 // Unneeded extras
 
