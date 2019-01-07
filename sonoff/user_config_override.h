@@ -45,7 +45,10 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x19123001   // yymmddnn  change this to force changes to be used immediately
+#define CFG_HOLDER           0x19010701   // yymmddnn  change this to force changes to be used immediately
+
+// enable extended immediate button pressing code in xdrv_93_button_immediate
+#define USE_BUTTON_IMMEDIATE
 
 #ifdef MODULE
 #undef MODULE
