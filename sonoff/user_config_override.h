@@ -45,12 +45,15 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x18123002   // yymmddnn  change this to force changes to be used immediately
+#define CFG_HOLDER           0x19010603   // yymmddnn  change this to force changes to be used immediately
 
 #ifdef MODULE
 #undef MODULE
 #endif
 #define MODULE               SONOFF_T11 // [Module] Sonoff T1 1 channel
+
+// enable extended immediate button pressing code in xdrv_93_button_immediate
+#define USE_BUTTON_IMMEDIATE
 
 #ifdef WIFI_IP_ADDRESS
 #undef WIFI_IP_ADDRESS
