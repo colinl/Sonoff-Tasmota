@@ -1,5 +1,5 @@
 /*
-  xdrv_91_timeprop.ino - Enhanced immediate button support for Sonoff-Tasmota
+  xdrv_93_button_immediate.ino - Enhanced immediate button support for Sonoff-Tasmota
   Copyright (C) 2018 Colin Law and Thomas Herrmann
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -94,9 +94,9 @@ void ButtonImmediateTick()
  * Interface
 \*********************************************************************************************/
 
-#define XDRV_91
+#define XDRV_93
 
-boolean Xdrv91(byte function)
+boolean Xdrv93(byte function)
 {
   boolean result = false;
 
