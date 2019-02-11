@@ -45,7 +45,7 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x19010603   // yymmddnn  change this to force changes to be used immediately
+#define CFG_HOLDER           0x19021100   // yymmddnn  change this to force changes to be used immediately
 
 #ifdef MODULE
 #undef MODULE
@@ -88,7 +88,7 @@
 #ifdef OTA_URL
 #undef OTA_URL
 #endif
-#define OTA_URL               "http://192.168.49.92:1880/sonoff/firmware.bin"
+#define OTA_URL               "http://192.168.49.92:1880/.pioenvs/s007/firmware.bin"
 
 #ifdef MQTT_HOST
 #undef MQTT_HOST
