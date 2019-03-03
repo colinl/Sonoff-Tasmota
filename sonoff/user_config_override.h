@@ -103,7 +103,7 @@
 #ifdef OTA_URL
 #undef OTA_URL
 #endif
-#define OTA_URL               "http://192.168.49.92:1880/sonoff/firmware.bin"
+#define OTA_URL               "http://192.168.49.92:1880/.pioenvs/s004/firmware.bin"
 
 #ifdef MQTT_HOST
 #undef MQTT_HOST
