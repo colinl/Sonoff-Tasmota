@@ -33,13 +33,13 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x19020400   // yymmddnn  change this to force changes to be used immediately
+#define CFG_HOLDER           0x19030300   // yymmddnn  change this to force changes to be used immediately
 
 #define USE_PID         // include the pid feature (+?k)
   #define PID_SETPOINT                  9.5    // setpoint
   #define PID_PROPBAND                  1.0     // proportional band in process units (eg degrees)
   #define PID_INTEGRAL_TIME             600     // integral time seconds
-  #define PID_DERIVATIVE_TIME           30       // derivative time seconds
+  #define PID_DERIVATIVE_TIME           15      // derivative time seconds
   #define PID_INITIAL_INT               0.5     // initial integral value (0:1)
   #define PID_MAX_INTERVAL              300     // max expected time between pv updates (used to fall back to safe power)
   #define PID_DERIV_SMOOTH_FACTOR       3       // derivative smoothing factor
