@@ -96,13 +96,14 @@ double PID::tick( unsigned long nowSecs ) {
               }
             } else {
               m_integral = m_integral + error * delta_t/m_t_integral;
-              // clamp to +- 0.5 prop band widths so that it cannot push the zero power point outside the pb
-              if ( m_integral < -pbo2 ) {
-                m_integral = -pbo2;
-              } else if (m_integral > pbo2) {
-                m_integral = pbo2;
-              }
             }
+          }
+          // clamp to +- 0.5 prop band widths so that it cannot push the zero power point outside the pb
+          // do this here rather than when integral is updated to allow for the fact that the pb may change dynamically
+          if ( m_integral < -pbo2 ) {
+            m_integral = -pbo2;
+          } else if (m_integral > pbo2) {
+            m_integral = pbo2;
           }
         }
 
