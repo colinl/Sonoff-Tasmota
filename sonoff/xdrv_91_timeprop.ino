@@ -92,13 +92,15 @@ static Timeprop timeprops[TIMEPROP_NUM_OUTPUTS];
 static int relayNos[TIMEPROP_NUM_OUTPUTS] = {TIMEPROP_RELAYS};
 static long currentRelayStates = 0;  // current actual relay states. Bit 0 first relay
 
+static long timeprop_current_time_secs = 0;  // a counter that counts seconds since initialisation
+
 /* call this from elsewhere if required to set the power value for one of the timeprop instances */
 /* index specifies which one, 0 up */
 void Timeprop_Set_Power( int index, float power )
 {
   if (index >= 0  &&  index < TIMEPROP_NUM_OUTPUTS)
   {
-    timeprops[index].setPower( power, utc_time);
+    timeprops[index].setPower( power, timeprop_current_time_secs);
   }
 }
 
@@ -114,13 +116,14 @@ void Timeprop_Init()
 
   for (int i=0; i<TIMEPROP_NUM_OUTPUTS; i++) {
     timeprops[i].initialise(cycleTimes[i], deadTimes[i], opInverts[i], fallbacks[i],
-      maxIntervals[i], utc_time);
+      maxIntervals[i], timeprop_current_time_secs);
   }
 }
 
 void Timeprop_Every_Second() {
+  timeprop_current_time_secs++;    // increment time
   for (int i=0; i<TIMEPROP_NUM_OUTPUTS; i++) {
-    int newState = timeprops[i].tick(utc_time);
+    int newState = timeprops[i].tick(timeprop_current_time_secs);
     if (newState != bitRead(currentRelayStates, relayNos[i]-1)){
       // remove the third parameter below if using tasmota prior to v6.0.0
       ExecuteCommandPower(relayNos[i], newState,SRC_IGNORE);
@@ -177,7 +180,7 @@ boolean Timeprop_Command()
         AddLog(LOG_LEVEL_INFO);
       */
       if (XdrvMailbox.index >=0 && XdrvMailbox.index < TIMEPROP_NUM_OUTPUTS) {
-        timeprops[XdrvMailbox.index].setPower( atof(XdrvMailbox.data), utc_time );
+        timeprops[XdrvMailbox.index].setPower( atof(XdrvMailbox.data), timeprop_current_time_secs );
       }
       snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_TIMEPROP D_CMND_TIMEPROP_SETPOWER "%d\":\"%s\"}"),
         XdrvMailbox.index, XdrvMailbox.data);
@@ -195,9 +198,10 @@ boolean Timeprop_Command()
  * Interface
 \*********************************************************************************************/
 
-#define XDRV_91
+#define XDRV_91       91
 
 boolean Xdrv91(byte function)
+//boolean XDRV_91(byte function)
 {
   boolean result = false;
 
