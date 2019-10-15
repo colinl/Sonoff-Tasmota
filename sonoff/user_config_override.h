@@ -48,7 +48,7 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x18061000   // yymmddnn  change this to force changes to be used immediately
+#define CFG_HOLDER           0x19101500   // yymmddnn  change this to force changes to be used immediately
 
 #define USE_PID         // include the pid feature (+?k)
   #define PID_SETPOINT                  20.0    // setpoint
