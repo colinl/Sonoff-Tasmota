@@ -122,7 +122,8 @@ void Timeprop_Every_Second() {
   for (int i=0; i<TIMEPROP_NUM_OUTPUTS; i++) {
     int newState = timeprops[i].tick(utc_time);
     if (newState != bitRead(currentRelayStates, relayNos[i]-1)){
-      ExecuteCommandPower(relayNos[i], newState);
+      // remove the third parameter below if using tasmota prior to v6.0.0
+      ExecuteCommandPower(relayNos[i], newState,SRC_IGNORE);
     }
   }
 }
