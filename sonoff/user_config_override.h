@@ -48,7 +48,7 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x19101500   // yymmddnn  change this to force changes to be used immediately
+#define CFG_HOLDER           0x19101502   // yymmddnn  change this to force changes to be used immediately
 
 #define USE_PID         // include the pid feature (+?k)
   #define PID_SETPOINT                  20.0    // setpoint
@@ -112,7 +112,7 @@
 #ifdef OTA_URL
 #undef OTA_URL
 #endif
-#define OTA_URL               "http://192.168.43.92:1880/sonoff/firmware.bin" // requires node red to be running on tigger
+#define OTA_URL               "http://192.168.43.92:1880/.pioenvs/s005/firmware.bin" // requires node red to be running on tigger
 
 #ifdef MQTT_HOST
 #undef MQTT_HOST
