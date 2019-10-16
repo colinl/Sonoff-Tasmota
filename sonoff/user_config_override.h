@@ -20,6 +20,9 @@
 #ifndef _USER_CONFIG_OVERRIDE_H_
 #define _USER_CONFIG_OVERRIDE_H_
 
+// force the compiler to show a warning to confirm that this file is inlcuded
+#warning **** user_config_override.h: Using Settings from this File ****
+
 /*****************************************************************************************************\
  * ATTENTION: - Changes to most PARAMETER defines will only override flash settings if you change
  *              define CFG_HOLDER.
@@ -29,6 +32,8 @@
  *            - Most parameters can be changed online using commands via MQTT, WebConsole or serial.
  *            - So I see no use in this but anyway, your on your own.
 \*****************************************************************************************************/
+
+#define MODULE                 SONOFF_TH
 
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
