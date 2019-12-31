@@ -118,6 +118,8 @@
  * This is directed towards using the algorithm in the node-red node node-red-contrib-pid but the algorithm here is based on
  * the code there and the tuning techique described there should work just the same.
 
+ * You can obtain a list of process values via MQTT using cmnd pid_status
+
  *
 **/
 
@@ -139,13 +141,14 @@
 #define D_CMND_PID_SETMANUAL_POWER "manual_power"
 #define D_CMND_PID_SETMAX_INTERVAL "max_interval"
 #define D_CMND_PID_SETUPDATE_SECS "update_secs"
+#define D_CMND_PID_GET_STATUS "status"
 
 enum PIDCommands { CMND_PID_SETPV, CMND_PID_SETSETPOINT, CMND_PID_SETPROPBAND, CMND_PID_SETINTEGRAL_TIME,
   CMND_PID_SETDERIVATIVE_TIME, CMND_PID_SETINITIAL_INT, CMND_PID_SETDERIV_SMOOTH_FACTOR, CMND_PID_SETAUTO,
-  CMND_PID_SETMANUAL_POWER, CMND_PID_SETMAX_INTERVAL, CMND_PID_SETUPDATE_SECS };
+  CMND_PID_SETMANUAL_POWER, CMND_PID_SETMAX_INTERVAL, CMND_PID_SETUPDATE_SECS, CMND_PID_GET_STATUS };
 const char kPIDCommands[] PROGMEM = D_CMND_PID_SETPV "|" D_CMND_PID_SETSETPOINT "|" D_CMND_PID_SETPROPBAND "|"
   D_CMND_PID_SETINTEGRAL_TIME "|" D_CMND_PID_SETDERIVATIVE_TIME "|" D_CMND_PID_SETINITIAL_INT "|" D_CMND_PID_SETDERIV_SMOOTH_FACTOR "|"
-  D_CMND_PID_SETAUTO "|" D_CMND_PID_SETMANUAL_POWER "|" D_CMND_PID_SETMAX_INTERVAL "|" D_CMND_PID_SETUPDATE_SECS;
+  D_CMND_PID_SETAUTO "|" D_CMND_PID_SETMANUAL_POWER "|" D_CMND_PID_SETMAX_INTERVAL "|" D_CMND_PID_SETUPDATE_SECS "|" D_CMND_PID_GET_STATUS;
 
 static PID pid;
 static int update_secs = PID_UPDATE_SECS <= 0  ?  0  :  PID_UPDATE_SECS;   // how often (secs) the pid alogorithm is run
@@ -311,6 +314,32 @@ boolean PID_Command()
         AddLog(LOG_LEVEL_INFO);
         update_secs = atoi(XdrvMailbox.data) ;
         if (update_secs < 0) update_secs = 0;
+        break;
+
+      char tmpstr[sizeof(log_data)];
+      case CMND_PID_GET_STATUS:
+        snprintf_P(log_data, sizeof(log_data), "PID settings:");
+        AddLog(LOG_LEVEL_INFO);
+        snprintf_P(log_data, sizeof(log_data), "  pid_pv:           %s", dtostrf(pid.getPv(), 1, 2, tmpstr));
+        AddLog(LOG_LEVEL_INFO);
+        snprintf_P(log_data, sizeof(log_data), "  pid_sp:           %s", dtostrf(pid.getSp(), 1, 2, tmpstr));
+        AddLog(LOG_LEVEL_INFO);
+        snprintf_P(log_data, sizeof(log_data), "  pid_pb:           %s", dtostrf(pid.getPb(), 1, 2, tmpstr));
+        AddLog(LOG_LEVEL_INFO);
+        snprintf_P(log_data, sizeof(log_data), "  pid_ti:           %s", dtostrf(pid.getTi(), 1, 2, tmpstr));
+        AddLog(LOG_LEVEL_INFO);
+        snprintf_P(log_data, sizeof(log_data), "  pid_td:           %s", dtostrf(pid.getTd(), 1, 2, tmpstr));
+        AddLog(LOG_LEVEL_INFO);
+        snprintf_P(log_data, sizeof(log_data), "  pid_initint:      %s", dtostrf(pid.getInitialInt(), 1, 2, tmpstr));
+        AddLog(LOG_LEVEL_INFO);
+        snprintf_P(log_data, sizeof(log_data), "  pid_d_smooth:     %s", dtostrf(pid.getDSmooth(), 1, 2, tmpstr));
+        AddLog(LOG_LEVEL_INFO);
+        snprintf_P(log_data, sizeof(log_data), "  pid_auto:         %d", pid.getAuto());
+        AddLog(LOG_LEVEL_INFO);
+        snprintf_P(log_data, sizeof(log_data), "  pid_manual_power: %s", dtostrf(pid.getManualPower(), 1, 2, tmpstr));
+        AddLog(LOG_LEVEL_INFO);
+        snprintf_P(log_data, sizeof(log_data), "  pid_max_interval: %d", pid.getMaxInterval());
+        AddLog(LOG_LEVEL_INFO);
         break;
 
       default:
