@@ -340,6 +340,8 @@ boolean PID_Command()
         AddLog(LOG_LEVEL_INFO);
         snprintf_P(log_data, sizeof(log_data), "  pid_max_interval: %d", pid.getMaxInterval());
         AddLog(LOG_LEVEL_INFO);
+        snprintf_P(log_data, sizeof(log_data), "  pid_update_secs:  %d", update_secs);
+        AddLog(LOG_LEVEL_INFO);
         break;
 
       default:
