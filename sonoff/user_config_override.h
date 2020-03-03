@@ -73,7 +73,7 @@
 #ifdef OTA_URL
 #undef OTA_URL
 #endif
-#define OTA_URL               "http://192.168.49.92:1880/.pioenvs/s009/firmware.bin"
+#define OTA_URL               "http://192.168.49.92:1880/.pioenvs_apps/s009/firmware.bin"
 
 #ifdef MQTT_HOST
 #undef MQTT_HOST
@@ -130,6 +130,11 @@
 #endif
 #define TEMP_RESOLUTION        3                  // 3 dec digits in temperature
 
+#if defined APP_POWERON_STATE
+#undef APP_POWERON_STATE
+#endif
+#define APP_POWERON_STATE      POWER_ALL_ON      // Set power on at startup (but doesn't seem to work) [PowerOnState] Power On Relay state
+                                                 //   (POWER_ALL_OFF, POWER_ALL_ON, POWER_ALL_SAVED_TOGGLE, POWER_ALL_SAVED, POWER_ALL_ALWAYS_ON, POWER_ALL_OFF_PULSETIME_ON)
 // Unneeded extras
 
 #ifdef USE_DOMOTICZ
