@@ -38,52 +38,17 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x19030300   // yymmddnn  change this to force changes to be used immediately
-
-#define USE_PID         // include the pid feature (+?k)
-  #define PID_SETPOINT                  9.5    // setpoint
-  #define PID_PROPBAND                  1.0     // proportional band in process units (eg degrees)
-  #define PID_INTEGRAL_TIME             600     // integral time seconds
-  #define PID_DERIVATIVE_TIME           15      // derivative time seconds
-  #define PID_INITIAL_INT               0.5     // initial integral value (0:1)
-  #define PID_MAX_INTERVAL              300     // max expected time between pv updates (used to fall back to safe power)
-  #define PID_DERIV_SMOOTH_FACTOR       3       // derivative smoothing factor
-  #define PID_AUTO                      1       // initial state enabled (1) or disabled (2)
-  #define PID_MANUAL_POWER              0       // power output when loop is disabled
-  #define PID_UPDATE_SECS               0       // how often to run the pid algorithm (integer secs) 0 to run for each new pv value
-  #define PID_USE_LOCAL_SENSOR                  // if defined then the local sensor will be used for pv. Comment this out if not required
-
-
-#define USE_TIMEPROP    //  include the timeprop feature (+1.2k)
-  // for single output
-  #define TIMEPROP_NUM_OUTPUTS          1       // how many outputs to control (with separate alogorithm for each)
-  #define TIMEPROP_CYCLETIMES           60      // cycle time seconds
-  #define TIMEPROP_DEADTIMES            0       // actuator action time seconds
-  #define TIMEPROP_OPINVERTS            false   // whether to invert the output
-  #define TIMEPROP_FALLBACK_POWERS      0       // falls back to this if too long betwen updates
-  #define TIMEPROP_MAX_UPDATE_INTERVALS 120     // max no secs that are allowed between power updates (0 to disable)
-  #define TIMEPROP_RELAYS               1       // which relay to control 1:8
-
-  /* example for multiple outputs*/
-  /*
-  #define TIMEPROP_NUM_OUTPUTS          2               // how many outputs to control (with separate alogorithm for each)
-  #define TIMEPROP_CYCLETIMES           60,     10      // cycle time seconds
-  #define TIMEPROP_DEADTIMES            0,      0       // actuator action time seconds
-  #define TIMEPROP_OPINVERTS            false,  false   // whether to invert the output
-  #define TIMEPROP_FALLBACK_POWERS      0,      0       // falls back to this if too long betwen updates
-  #define TIMEPROP_MAX_UPDATE_INTERVALS 120,    120     // max no secs that are allowed between power updates (0 to disable)
-  #define TIMEPROP_RELAYS               1,      2       // which relay to control 1:8
-  */
+#define CFG_HOLDER           0x20030300   // yymmddnn  change this to force changes to be used immediately
 
 #ifdef WIFI_IP_ADDRESS
 #undef WIFI_IP_ADDRESS
 #endif
-#define WIFI_IP_ADDRESS      "192.168.50.95"
+#define WIFI_IP_ADDRESS      "192.168.49.68"
 
 #ifdef WIFI_GATEWAY
 #undef WIFI_GATEWAY
 #endif
-#define WIFI_GATEWAY         "192.168.50.1"
+#define WIFI_GATEWAY         "192.168.49.1"
 
 #ifdef WIFI_SUBNETMASK
 #undef WIFI_SUBNETMASK
@@ -98,7 +63,7 @@
 #ifdef STA_SSID1
 #undef STA_SSID1
 #endif
-#define STA_SSID1            "pi02"
+#define STA_SSID1            "RedKite"
 
 #ifdef STA_PASS1
 #undef STA_PASS1
@@ -108,12 +73,12 @@
 #ifdef OTA_URL
 #undef OTA_URL
 #endif
-#define OTA_URL               "http://192.168.49.92:1880/.pioenvs/s004/firmware.bin"
+#define OTA_URL               "http://192.168.49.92:1880/.pioenvs/s009/firmware.bin"
 
 #ifdef MQTT_HOST
 #undef MQTT_HOST
 #endif
-#define MQTT_HOST            "192.168.49.85"                // pi02
+#define MQTT_HOST            "192.168.49.83"                // owl2
 
 #ifdef MQTT_USER
 #undef MQTT_USER
@@ -138,22 +103,22 @@
 #ifdef MQTT_FULLTOPIC
 #undef MQTT_FULLTOPIC
 #endif
-#define MQTT_FULLTOPIC         "tydwr/conservatory/%topic%/%prefix%/" // [FullTopic] Subscribe and Publish full topic name
+#define MQTT_FULLTOPIC         "tydwr/3dprinter/%topic%/%prefix%/" // [FullTopic] Subscribe and Publish full topic name
 
 #ifdef MQTT_TOPIC
 #undef MQTT_TOPIC
 #endif
-#define MQTT_TOPIC             "s004"           // [Topic] (unique) MQTT device topic
+#define MQTT_TOPIC             "s009"           // [Topic] (unique) MQTT device topic
 
 #ifdef TELE_PERIOD
 #undef TELE_PERIOD
 #endif
-#define TELE_PERIOD            10               // [TelePeriod] Telemetry (0 = disable, 10 - 3600 seconds)
+#define TELE_PERIOD            60               // [TelePeriod] Telemetry (0 = disable, 10 - 3600 seconds)
 
 #ifdef FRIENDLY_NAME
 #undef FRIENDLY_NAME
 #endif
-#define FRIENDLY_NAME        "s004"          // [FriendlyName] Friendlyname up to 32 characters used by webpages and Alexa
+#define FRIENDLY_NAME        "s009"          // [FriendlyName] Friendlyname up to 32 characters used by webpages and Alexa
 
 #ifdef APP_TIMEZONE
 #undef APP_TIMEZONE
