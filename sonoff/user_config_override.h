@@ -38,7 +38,7 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x20030300   // yymmddnn  change this to force changes to be used immediately
+#define CFG_HOLDER           0x20030700   // yymmddnn  change this to force changes to be used immediately
 
 #ifdef WIFI_IP_ADDRESS
 #undef WIFI_IP_ADDRESS
@@ -69,6 +69,14 @@
 #undef STA_PASS1
 #endif
 #define STA_PASS1            "ladycaroline"
+
+#ifdef WIFI_CONFIG_TOOL
+#undef WIFI_CONFIG_TOOL
+#endif
+// if no wifi then just wait for it
+#define WIFI_CONFIG_TOOL       WIFI_WAIT        // [WifiConfig] Default tool if wifi fails to connect
+                                                 //   (WIFI_RESTART, WIFI_SMARTCONFIG, WIFI_MANAGER, WIFI_WPSCONFIG, WIFI_RETRY, WIFI_WAIT, WIFI_SERIAL)
+
 
 #ifdef OTA_URL
 #undef OTA_URL
@@ -133,7 +141,7 @@
 #if defined APP_POWERON_STATE
 #undef APP_POWERON_STATE
 #endif
-#define APP_POWERON_STATE      POWER_ALL_ON      // Set power on at startup (but doesn't seem to work) [PowerOnState] Power On Relay state
+#define APP_POWERON_STATE      POWER_ALL_OFF      // Set power off at startup [PowerOnState] Power On Relay state
                                                  //   (POWER_ALL_OFF, POWER_ALL_ON, POWER_ALL_SAVED_TOGGLE, POWER_ALL_SAVED, POWER_ALL_ALWAYS_ON, POWER_ALL_OFF_PULSETIME_ON)
 // Unneeded extras
 
