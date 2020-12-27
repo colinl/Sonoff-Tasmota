@@ -115,6 +115,8 @@
 
    //#define PID_SHUTTER                   1     // if using the PID to control a 3-way valve, create Tasmota Shutter and define the 
                                                  // number of the shutter here. Otherwise leave this commented out
+                                                 
+ #define PID_USE_PWM                             // if defined the PID output is sent to PWM Output pin
 
  * Help with using the PID algorithm and with loop tuning can be found at
  * http://blog.clanlaw.org.uk/2018/01/09/PID-tuning-with-node-red-contrib-pid.html
@@ -349,6 +351,16 @@ static void run_pid()
     // send power to appropriate timeprop output
     Timeprop_Set_Power( PID_USE_TIMPROP-1, power );
 #endif // PID_USE_TIMPROP
+  
+  #if defined PID_USE_PWM
+    int pwm_power = 50 * (power + 0.5);// send power to pwm output 1
+    //dimmer = pwm_power;
+    XdrvMailbox.index = 1;
+    XdrvMailbox.payload = pwm_power;
+    CmndDimmer(); //pwm_value[1]
+    
+#endif // PID_USE_PWM
+  
 }
 
 /*********************************************************************************************\

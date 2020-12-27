@@ -90,7 +90,7 @@ Examples :
 */
 
 
-
+ #define PID_USE_PWM                             // if defined the PID output is sent to PWM Output pin
 
 
 #endif  // _USER_CONFIG_OVERRIDE_H_
