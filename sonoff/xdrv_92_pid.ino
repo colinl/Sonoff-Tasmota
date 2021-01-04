@@ -160,8 +160,7 @@ static long pid_current_time_secs = 0;  // a counter that counts seconds since i
 
 void PID_Init()
 {
-  snprintf_P(log_data, sizeof(log_data), "PID Init");
-  AddLog(LOG_LEVEL_INFO);
+  AddLog_P(LOG_LEVEL_INFO, PSTR("PID Init"));
   pid.initialise( PID_SETPOINT, PID_PROPBAND, PID_INTEGRAL_TIME, PID_DERIVATIVE_TIME, PID_INITIAL_INT,
     PID_MAX_INTERVAL, PID_DERIV_SMOOTH_FACTOR, PID_AUTO, PID_MANUAL_POWER );
 }
@@ -182,33 +181,58 @@ void PID_Show_Sensor() {
   // as published in tele/SENSOR
   // Update period is specified in TELE_PERIOD
   // e.g. "{"Time":"2018-03-13T16:48:05","DS18B20":{"Temperature":22.0},"TempUnit":"C"}"
-  snprintf_P(log_data, sizeof(log_data), "PID_Show_Sensor: mqtt_data: %s", mqtt_data);
-  AddLog(LOG_LEVEL_INFO);
-  StaticJsonBuffer<400> jsonBuffer;
-  // force mqtt_data to read only to stop parse from overwriting it
-  JsonObject& data_json = jsonBuffer.parseObject((const char*)mqtt_data);
-  if (data_json.success()) {
-    const char* value = data_json["DS18B20"]["Temperature"];
+  AddLog_P(LOG_LEVEL_INFO, PSTR("PID_Show_Sensor: mqtt_data: %s"), TasmotaGlobal.mqtt_data);
+  AddLog_P(LOG_LEVEL_INFO, PSTR("length of MQTT MEssage: %d"), sizeof(TasmotaGlobal.mqtt_data));
+
+  // I need a copy of the mqtt buffer, because otherwise the actual
+  // message will be truncated after this call:
+  // JsonParser parser( (char*)TasmotaGlobal.mqtt_data);
+  char mqtt_buf[sizeof(TasmotaGlobal.mqtt_data)];
+  strncpy (mqtt_buf, TasmotaGlobal.mqtt_data, 300);
+
+  JsonParser parser( (char*)mqtt_buf);
+  JsonParserObject root = parser.getRootObject();
+  if (!root) {
+    AddLog_P(LOG_LEVEL_ERROR, PSTR("Invalid JSON in PID processing: %s"), mqtt_buf);
+  }
+
+  // Check if there is a named entry in the json:
+  JsonParserToken ds18b20_entry = root[PSTR("DS18B20")];
+  if (ds18b20_entry) {
+    // create a new object for the DS18B20 branch:
+    JsonParserObject ds18b20_obj = root[PSTR("DS18B20")].getObject();
+    if (ds18b20_obj) {
+      float ds18b20_temperature = 666; // use a temperature outside the range as a default 
+      JsonParserToken ds18b20_temperature_token = ds18b20_obj[PSTR("Temperature")];
+      if (ds18b20_temperature_token) {
+        ds18b20_temperature = ds18b20_obj.getFloat(PSTR("Temperature"), 665);
+
+        char the_value[10];
+        dtostrfd(ds18b20_temperature, 3, the_value);
+        AddLog_P(LOG_LEVEL_INFO, PSTR("the_value: %s"), the_value);
+      } else {
+        AddLog_P(LOG_LEVEL_ERROR, PSTR("No Temperature found in DS18B20"));
+      }
     // check that something was found and it contains a number
-    if (value != NULL && strlen(value) > 0 && (isdigit(value[0]) || (value[0] == '-' && isdigit(value[1])) ) ) {
-      snprintf_P(log_data, sizeof(log_data), "PID_Show_Sensor: Temperature: %s", value);
-      AddLog(LOG_LEVEL_INFO);
+    if (ds18b20_temperature < 130) { // maximal range of DS18B20 is 125
+      AddLog_P(LOG_LEVEL_INFO, PSTR("PID_Show_Sensor: Temperature: %f"), ds18b20_temperature);
       // pass the value to the pid alogorithm to use as current pv
       last_pv_update_secs = pid_current_time_secs;
-      pid.setPv(atof(value), last_pv_update_secs);
+      pid.setPv(ds18b20_temperature, last_pv_update_secs);
       // also trigger running the pid algorithm if we have been told to run it each pv sample
       if (update_secs == 0) {
         // this runs it at the next second
         run_pid_now = true;
       }
     } else {
-      snprintf_P(log_data, sizeof(log_data), "PID_Show_Sensor - no temperature found");
-      AddLog(LOG_LEVEL_INFO);
+      AddLog_P(LOG_LEVEL_INFO, PSTR("PID_Show_Sensor - no temperature found"));
     }
-  } else  {
+    } else {// if no ds18b20_obj found
+      AddLog_P(LOG_LEVEL_ERROR, PSTR("Invalid JSON in PID processing..."));
+    }
+  } else  { // no ds18b20 key found
     // parse failed
-    snprintf_P(log_data, sizeof(log_data), "PID_Show_Sensor - json parse failed");
-    AddLog(LOG_LEVEL_INFO);
+    AddLog_P(LOG_LEVEL_INFO, PSTR("PID_Show_Sensor - json parse failed"));
   }
 }
 
@@ -228,14 +252,13 @@ boolean PID_Command()
   boolean serviced = true;
   uint8_t ua_prefix_len = strlen(D_CMND_PID); // to detect prefix of command
 
-  snprintf_P(log_data, sizeof(log_data), "Command called: "
-    "index: %d data_len: %d payload: %d topic: %s data: %s",
+  AddLog_P(LOG_LEVEL_INFO, PSTR("Command called: "
+    "index: %d data_len: %d payload: %d topic: %s data: %s"),
     XdrvMailbox.index,
     XdrvMailbox.data_len,
     XdrvMailbox.payload,
     (XdrvMailbox.payload >= 0 ? XdrvMailbox.topic : ""),
     (XdrvMailbox.data_len >= 0 ? XdrvMailbox.data : ""));
-  AddLog(LOG_LEVEL_INFO);
 
   if (0 == strncasecmp_P(XdrvMailbox.topic, PSTR(D_CMND_PID), ua_prefix_len)) {
     // command starts with pid_
@@ -243,8 +266,7 @@ boolean PID_Command()
     serviced = true;
     switch (command_code) {
       case CMND_PID_SETPV:
-        snprintf_P(log_data, sizeof(log_data), "PID command setpv");
-        AddLog(LOG_LEVEL_INFO);
+        AddLog_P(LOG_LEVEL_INFO, PSTR("PID command setpv"));
         last_pv_update_secs = pid_current_time_secs;
         pid.setPv(atof(XdrvMailbox.data), last_pv_update_secs);
         // also trigger running the pid algorithm if we have been told to run it each pv sample
@@ -255,63 +277,53 @@ boolean PID_Command()
         break;
 
       case CMND_PID_SETSETPOINT:
-        snprintf_P(log_data, sizeof(log_data), "PID command setsetpoint");
-        AddLog(LOG_LEVEL_INFO);
+        AddLog_P(LOG_LEVEL_INFO, PSTR("PID command setsetpoint"));
         pid.setSp(atof(XdrvMailbox.data));
         break;
 
       case CMND_PID_SETPROPBAND:
-        snprintf_P(log_data, sizeof(log_data), "PID command propband");
-        AddLog(LOG_LEVEL_INFO);
+        AddLog_P(LOG_LEVEL_INFO, PSTR("PID command propband"));
         pid.setPb(atof(XdrvMailbox.data));
         break;
 
       case CMND_PID_SETINTEGRAL_TIME:
-        snprintf_P(log_data, sizeof(log_data), "PID command Ti");
-        AddLog(LOG_LEVEL_INFO);
+        AddLog_P(LOG_LEVEL_INFO, PSTR("PID command Ti"));
         pid.setTi(atof(XdrvMailbox.data));
         break;
 
       case CMND_PID_SETDERIVATIVE_TIME:
-        snprintf_P(log_data, sizeof(log_data), "PID command Td");
-        AddLog(LOG_LEVEL_INFO);
+        AddLog_P(LOG_LEVEL_INFO, PSTR("PID command Td"));
         pid.setTd(atof(XdrvMailbox.data));
         break;
 
       case CMND_PID_SETINITIAL_INT:
-        snprintf_P(log_data, sizeof(log_data), "PID command initial int");
-        AddLog(LOG_LEVEL_INFO);
+        AddLog_P(LOG_LEVEL_INFO, PSTR("PID command initial int"));
         pid.setInitialInt(atof(XdrvMailbox.data));
         break;
 
       case CMND_PID_SETDERIV_SMOOTH_FACTOR:
-        snprintf_P(log_data, sizeof(log_data), "PID command deriv smooth");
-        AddLog(LOG_LEVEL_INFO);
+        AddLog_P(LOG_LEVEL_INFO, PSTR("PID command deriv smooth"));
         pid.setDSmooth(atof(XdrvMailbox.data));
         break;
 
       case CMND_PID_SETAUTO:
-        snprintf_P(log_data, sizeof(log_data), "PID command auto");
-        AddLog(LOG_LEVEL_INFO);
+        AddLog_P(LOG_LEVEL_INFO, PSTR("PID command auto"));
         pid.setAuto(atoi(XdrvMailbox.data));
         break;
 
       case CMND_PID_SETMANUAL_POWER:
-        snprintf_P(log_data, sizeof(log_data), "PID command manual power");
-        AddLog(LOG_LEVEL_INFO);
+        AddLog_P(LOG_LEVEL_INFO, PSTR("PID command manual power"));
         pid.setManualPower(atof(XdrvMailbox.data));
         break;
 
       case CMND_PID_SETMAX_INTERVAL:
-      snprintf_P(log_data, sizeof(log_data), "PID command set max interval");
-      AddLog(LOG_LEVEL_INFO);
+      AddLog_P(LOG_LEVEL_INFO, PSTR("PID command set max interval"));
       max_interval = atoi(XdrvMailbox.data);
       pid.setMaxInterval(max_interval);
       break;
 
       case CMND_PID_SETUPDATE_SECS:
-        snprintf_P(log_data, sizeof(log_data), "PID command set update secs");
-        AddLog(LOG_LEVEL_INFO);
+        AddLog_P(LOG_LEVEL_INFO, PSTR("PID command set update secs"));
         update_secs = atoi(XdrvMailbox.data) ;
         if (update_secs < 0) update_secs = 0;
         break;
@@ -322,7 +334,7 @@ boolean PID_Command()
 
     if (serviced) {
       // set mqtt RESULT
-      snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"%s\":\"%s\"}"), XdrvMailbox.topic, XdrvMailbox.data);
+      snprintf_P(TasmotaGlobal.mqtt_data, sizeof(TasmotaGlobal.mqtt_data), PSTR("{\"%s\":\"%s\"}"), XdrvMailbox.topic, XdrvMailbox.data);
     }
 
   } else {
@@ -336,8 +348,9 @@ static void run_pid()
   double power = pid.tick(pid_current_time_secs);
   char buf[10];
   dtostrfd(power, 3, buf);
-  snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"%s\":\"%s\"}"), "power", buf);
+  snprintf_P(TasmotaGlobal.mqtt_data, sizeof(TasmotaGlobal.mqtt_data), PSTR("{\"%s\":\"%s\"}"), "power", buf);
   MqttPublishPrefixTopic_P(TELE, "PID", false);
+  AddLog_P (LOG_LEVEL_INFO, PSTR("power: %s"), buf);
 
 #if defined PID_SHUTTER
     // send output as a position from 0-100 to defined shutter
