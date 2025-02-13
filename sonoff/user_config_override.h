@@ -78,7 +78,9 @@
 #ifdef WIFI_IP_ADDRESS
 #undef WIFI_IP_ADDRESS
 #endif
-#define WIFI_IP_ADDRESS      "192.168.50.95"
+// NOTE this is not in the built version as of 13/02/25, changes made via web interface and console instead
+//Use DHCP
+#define WIFI_IP_ADDRESS      "0.0.0.0"
 
 #ifdef WIFI_GATEWAY
 #undef WIFI_GATEWAY
@@ -98,12 +100,23 @@
 #ifdef STA_SSID1
 #undef STA_SSID1
 #endif
-#define STA_SSID1            "pi02"
+# // NOTE SSID changes are not in the built version as of 13/02/25, changes made via web interface and console instead
+#define STA_SSID1            "RK_tpl_01"
 
 #ifdef STA_PASS1
 #undef STA_PASS1
 #endif
 #define STA_PASS1            "ladycaroline"
+
+#ifdef STA_SSID2
+#undef STA_SSID2
+#endif
+#define STA_SSID2            "RedKite"
+
+#ifdef STA_PASS2
+#undef STA_PASS2
+#endif
+#define STA_PASS2            "ladycaroline"
 
 #ifdef OTA_URL
 #undef OTA_URL
