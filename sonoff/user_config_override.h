@@ -20,7 +20,7 @@
 #ifndef _USER_CONFIG_OVERRIDE_H_
 #define _USER_CONFIG_OVERRIDE_H_
 
-// force the compiler to show a warning to confirm that this file is inlcuded
+// force the compiler to show a warning to confirm that this file is included
 #warning **** user_config_override.h: Using Settings from this File ****
 
 /*****************************************************************************************************\
@@ -48,17 +48,17 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x19101502   // yymmddnn  change this to force changes to be used immediately
+#define CFG_HOLDER           0x25042706   // yymmddnn  change this to force changes to be used immediately
 
 #define USE_PID         // include the pid feature (+?k)
   #define PID_SETPOINT                  20.0    // setpoint
-  #define PID_PROPBAND                  4.0    // proportional band in process units (eg degrees)
-  #define PID_INTEGRAL_TIME             1200    // integral time seconds
+  #define PID_PROPBAND                  0.01    // proportional band in process units (eg degrees) - we want effectively On/Off
+  #define PID_INTEGRAL_TIME             10      // integral time seconds - effectively on/off
   #define PID_DERIVATIVE_TIME           0       // derivative time seconds
-  #define PID_INITIAL_INT               0.5     // initial integral value (0:1)
+  #define PID_INITIAL_INT               0.0     // initial integral value (0:1)
   #define PID_MAX_INTERVAL              1200    // max expected time between pv updates (used to fall back to safe power)
   #define PID_DERIV_SMOOTH_FACTOR       3       // derivative smoothing factor
-  #define PID_AUTO                      1       // initial state enabled (1) or disabled (2)
+  #define PID_AUTO                      2       // initial state enabled (1) or disabled (2)
   #define PID_MANUAL_POWER              0       // power output when loop is disabled
   #define PID_UPDATE_SECS               0       // how often to run the pid algorithm (integer secs) 0 to run for each new pv value
   #define PID_USE_TIMPROP               1       // which timeprop settings to use (1 up), leave undefined if timeprop o/p not required
@@ -75,49 +75,41 @@
   #define TIMEPROP_MAX_UPDATE_INTERVALS 120     // max no secs that are allowed between power updates (0 to disable)
   #define TIMEPROP_RELAYS               1       // which relay to control 1:8
 
-#ifdef WIFI_IP_ADDRESS
-#undef WIFI_IP_ADDRESS
-#endif
-#define WIFI_IP_ADDRESS      "192.168.43.90"    // For connecting to android hotspot
-
-#ifdef WIFI_GATEWAY
-#undef WIFI_GATEWAY
-#endif
-#define WIFI_GATEWAY         "192.168.43.1"
-
-#ifdef WIFI_SUBNETMASK
-#undef WIFI_SUBNETMASK
-#endif
-#define WIFI_SUBNETMASK      "255.255.255.0"
-
-#ifdef WIFI_DNS
-#undef WIFI_DNS
-#endif
-#define WIFI_DNS             "192.168.43.1"
+// Leave IP addresses at default so it will use DHCP
 
 #undef WIFI_CONFIG_TOOL
-#define WIFI_CONFIG_TOOL       WIFI_WAIT    // [WifiConfig] just wait for re-connection if no wifi
+#define WIFI_CONFIG_TOOL       WIFI_MANAGER // [WifiConfig] Run wifi manager if no connection (I think)
                                             //   (WIFI_RESTART, WIFI_SMARTCONFIG, WIFI_MANAGER, WIFI_WPSCONFIG, WIFI_RETRY, WIFI_WAIT)
 
 #ifdef STA_SSID1
 #undef STA_SSID1
 #endif
-#define STA_SSID1            "motog2"
+#define STA_SSID1            "RedKite"
 
 #ifdef STA_PASS1
 #undef STA_PASS1
 #endif
 #define STA_PASS1            "ladycaroline"
 
+#ifdef STA_SSID2
+#undef STA_SSID2
+#endif
+#define STA_SSID2            "motog2"
+
+#ifdef STA_PASS2
+#undef STA_PASS2
+#endif
+#define STA_PASS2            "ladycaroline"
+
 #ifdef OTA_URL
 #undef OTA_URL
 #endif
-#define OTA_URL               "http://192.168.43.92:1880/.pioenvs/s005/firmware.bin" // requires node red to be running on tigger
+#define OTA_URL               "http://192.168.49.92:1880/.pioenvs/s005/firmware.bin" // requires node red to be running on tigger
 
 #ifdef MQTT_HOST
 #undef MQTT_HOST
 #endif
-#define MQTT_HOST            "192.168.43.1"                // moto g2
+#define MQTT_HOST            "192.168.49.79"                // owl
 
 #ifdef MQTT_USER
 #undef MQTT_USER
@@ -142,7 +134,7 @@
 #ifdef MQTT_FULLTOPIC
 #undef MQTT_FULLTOPIC
 #endif
-#define MQTT_FULLTOPIC         "caravan/%topic%/%prefix%/" // [FullTopic] Subscribe and Publish full topic name
+#define MQTT_FULLTOPIC         "tydwr/%topic%/%prefix%/" // [FullTopic] Subscribe and Publish full topic name
 
 #ifdef MQTT_TOPIC
 #undef MQTT_TOPIC
