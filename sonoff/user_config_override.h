@@ -33,7 +33,7 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x18040200   // yymmddnn  change this to force changes to be used immediately
+#define CFG_HOLDER           0x25042800   // yymmddnn  change this to force changes to be used immediately
 
 #define USE_PID         // include the pid feature (+?k)
   #define PID_SETPOINT                  3.1    // setpoint
@@ -70,25 +70,25 @@
   #define TIMEPROP_RELAYS               1,      2       // which relay to control 1:8
   */
 
-#ifdef WIFI_IP_ADDRESS
-#undef WIFI_IP_ADDRESS
-#endif
-#define WIFI_IP_ADDRESS      "192.168.51.98"
+//#ifdef WIFI_IP_ADDRESS
+//#undef WIFI_IP_ADDRESS
+//#endif
+//#define WIFI_IP_ADDRESS      "192.168.51.98"
 
-#ifdef WIFI_GATEWAY
-#undef WIFI_GATEWAY
-#endif
-#define WIFI_GATEWAY         "192.168.51.1"
+//#ifdef WIFI_GATEWAY
+//#undef WIFI_GATEWAY
+//#endif
+//#define WIFI_GATEWAY         "192.168.51.1"
 
-#ifdef WIFI_SUBNETMASK
-#undef WIFI_SUBNETMASK
-#endif
-#define WIFI_SUBNETMASK      "255.255.255.0"
+//#ifdef WIFI_SUBNETMASK
+//#undef WIFI_SUBNETMASK
+//#endif
+//#define WIFI_SUBNETMASK      "255.255.255.0"
 
-#ifdef WIFI_DNS
-#undef WIFI_DNS
-#endif
-#define WIFI_DNS             "192.168.49.1"
+//#ifdef WIFI_DNS
+//#undef WIFI_DNS
+//#endif
+//#define WIFI_DNS             "192.168.49.1"
 
 #ifdef STA_SSID1
 #undef STA_SSID1
@@ -103,17 +103,17 @@
 #ifdef STA_SSID2
 #undef STA_SSID2
 #endif
-#define STA_SSID2            ""
+#define STA_SSID2            "RK_tpl_01"
 
 #ifdef STA_PASS2
 #undef STA_PASS2
 #endif
-#define STA_PASS2            ""
+#define STA_PASS2            "ladycaroline"
 
 #ifdef WIFI_CONFIG_TOOL
 #undef WIFI_CONFIG_TOOL
 #endif
-#define WIFI_CONFIG_TOOL      WIFI_WAIT    // If wifi doesn't connect just carry on
+#define WIFI_CONFIG_TOOL      WIFI_MANAGER //WIFI_WAIT    // If wifi doesn't connect just carry on
 
 #ifdef OTA_URL
 #undef OTA_URL
