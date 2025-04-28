@@ -1,7 +1,7 @@
 /*
   xsns_07_sht1x.ino - SHT1x temperature and sensor support for Sonoff-Tasmota
 
-  Copyright (C) 2018  Theo Arends
+  Copyright (C) 2019  Theo Arends
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -28,6 +28,8 @@
  * I2C Address: None
 \*********************************************************************************************/
 
+#define XSNS_07             7
+
 enum {
   SHT1X_CMD_MEASURE_TEMP  = B00000011,
   SHT1X_CMD_MEASURE_RH    = B00000101,
@@ -37,22 +39,26 @@ enum {
 uint8_t sht_sda_pin;
 uint8_t sht_scl_pin;
 uint8_t sht_type = 0;
+char sht_types[] = "SHT1X";
+uint8_t sht_valid = 0;
+float sht_temperature = 0;
+float sht_humidity = 0;
 
-boolean ShtReset()
+bool ShtReset(void)
 {
   pinMode(sht_sda_pin, INPUT_PULLUP);
   pinMode(sht_scl_pin, OUTPUT);
   delay(11);
-  for (byte i = 0; i < 9; i++) {
+  for (uint32_t i = 0; i < 9; i++) {
     digitalWrite(sht_scl_pin, HIGH);
     digitalWrite(sht_scl_pin, LOW);
   }
-  boolean success = ShtSendCommand(SHT1X_CMD_SOFT_RESET);
+  bool success = ShtSendCommand(SHT1X_CMD_SOFT_RESET);
   delay(11);
   return success;
 }
 
-boolean ShtSendCommand(const byte cmd)
+bool ShtSendCommand(const uint8_t cmd)
 {
   pinMode(sht_sda_pin, OUTPUT);
   // Transmission Start sequence
@@ -66,7 +72,7 @@ boolean ShtSendCommand(const byte cmd)
   // Send the command (address must be 000b)
   shiftOut(sht_sda_pin, sht_scl_pin, MSBFIRST, cmd);
   // Wait for ACK
-  boolean ackerror = false;
+  bool ackerror = false;
   digitalWrite(sht_scl_pin, HIGH);
   pinMode(sht_sda_pin, INPUT_PULLUP);
   if (digitalRead(sht_sda_pin) != LOW) {
@@ -84,10 +90,10 @@ boolean ShtSendCommand(const byte cmd)
   return (!ackerror);
 }
 
-boolean ShtAwaitResult()
+bool ShtAwaitResult(void)
 {
   // Maximum 320ms for 14 bit measurement
-  for (byte i = 0; i < 16; i++) {
+  for (uint32_t i = 0; i < 16; i++) {
     if (LOW == digitalRead(sht_sda_pin)) {
       return true;
     }
@@ -98,7 +104,7 @@ boolean ShtAwaitResult()
   return false;
 }
 
-int ShtReadData()
+int ShtReadData(void)
 {
   int val = 0;
 
@@ -119,62 +125,46 @@ int ShtReadData()
   return val;
 }
 
-boolean ShtReadTempHum(float &t, float &h)
+bool ShtRead(void)
 {
-  float tempRaw;
-  float humRaw;
-  float rhLinear;
+  if (sht_valid) { sht_valid--; }
+  if (!ShtReset()) { return false; }
+  if (!ShtSendCommand(SHT1X_CMD_MEASURE_TEMP)) { return false; }
+  if (!ShtAwaitResult()) { return false; }
+  float tempRaw = ShtReadData();
+  if (!ShtSendCommand(SHT1X_CMD_MEASURE_RH)) { return false; }
+  if (!ShtAwaitResult()) { return false; }
+  float humRaw = ShtReadData();
 
-  t = NAN;
-  h = NAN;
-
-  if (!ShtReset()) {
-    return false;
-  }
-  if (!ShtSendCommand(SHT1X_CMD_MEASURE_TEMP)) {
-    return false;
-  }
-  if (!ShtAwaitResult()) {
-    return false;
-  }
-  tempRaw = ShtReadData();
   // Temperature conversion coefficients from SHT1X datasheet for version 4
   const float d1 = -39.7;  // 3.5V
   const float d2 = 0.01;   // 14-bit
-  t = d1 + (tempRaw * d2);
-  if (!ShtSendCommand(SHT1X_CMD_MEASURE_RH)) {
-    return false;
-  }
-  if (!ShtAwaitResult()) {
-    return false;
-  }
-  humRaw = ShtReadData();
-  // Temperature conversion coefficients from SHT1X datasheet for version 4
+  sht_temperature = d1 + (tempRaw * d2);
   const float c1 = -2.0468;
   const float c2 = 0.0367;
   const float c3 = -1.5955E-6;
   const float t1 = 0.01;
   const float t2 = 0.00008;
-  rhLinear = c1 + c2 * humRaw + c3 * humRaw * humRaw;
-  h = (t - 25) * (t1 + t2 * humRaw) + rhLinear;
-  t = ConvertTemp(t);
-  return (!isnan(t) && !isnan(h));
+  float rhLinear = c1 + c2 * humRaw + c3 * humRaw * humRaw;
+  sht_humidity = (sht_temperature - 25) * (t1 + t2 * humRaw) + rhLinear;
+  sht_temperature = ConvertTemp(sht_temperature);
+  ConvertHumidity(sht_humidity);  // Set global humidity
+
+  sht_valid = SENSOR_MAX_MISS;
+  return true;
 }
 
 /********************************************************************************************/
 
-void ShtDetect()
+void ShtDetect(void)
 {
   if (sht_type) {
     return;
   }
 
-  float t;
-  float h;
-
   sht_sda_pin = pin[GPIO_I2C_SDA];
   sht_scl_pin = pin[GPIO_I2C_SCL];
-  if (ShtReadTempHum(t, h)) {
+  if (ShtRead()) {
     sht_type = 1;
     AddLog_P(LOG_LEVEL_DEBUG, PSTR(D_LOG_I2C D_SHT1X_FOUND));
   } else {
@@ -183,30 +173,43 @@ void ShtDetect()
   }
 }
 
-void ShtShow(boolean json)
+void ShtEverySecond(void)
 {
-  if (sht_type) {
-    float t;
-    float h;
+  if (sht_type && !(uptime %4)) {  // Update every 4 seconds
+    // 344mS
+    if (!ShtRead()) {
+      AddLogMissed(sht_types, sht_valid);
+//      if (!sht_valid) { sht_type = 0; }
+    }
+  }
+}
 
-    if (ShtReadTempHum(t, h)) {
-      char temperature[10];
-      char humidity[10];
+void ShtShow(bool json)
+{
+  if (sht_valid) {
+    char temperature[33];
+    dtostrfd(sht_temperature, Settings.flag2.temperature_resolution, temperature);
+    char humidity[33];
+    dtostrfd(sht_humidity, Settings.flag2.humidity_resolution, humidity);
 
-      dtostrfd(t, Settings.flag2.temperature_resolution, temperature);
-      dtostrfd(h, Settings.flag2.humidity_resolution, humidity);
-
-      if (json) {
-        snprintf_P(mqtt_data, sizeof(mqtt_data), JSON_SNS_TEMPHUM, mqtt_data, "SHT1X", temperature, humidity);
+    if (json) {
+      ResponseAppend_P(JSON_SNS_TEMPHUM, sht_types, temperature, humidity);
 #ifdef USE_DOMOTICZ
+      if (0 == tele_period) {
         DomoticzTempHumSensor(temperature, humidity);
-#endif  // USE_DOMOTICZ
-#ifdef USE_WEBSERVER
-      } else {
-        snprintf_P(mqtt_data, sizeof(mqtt_data), HTTP_SNS_TEMP, mqtt_data, "SHT1X", temperature, TempUnit());
-        snprintf_P(mqtt_data, sizeof(mqtt_data), HTTP_SNS_HUM, mqtt_data, "SHT1X", humidity);
-#endif  // USE_WEBSERVER
       }
+#endif  // USE_DOMOTICZ
+#ifdef USE_KNX
+      if (0 == tele_period) {
+        KnxSensor(KNX_TEMPERATURE, sht_temperature);
+        KnxSensor(KNX_HUMIDITY, sht_humidity);
+      }
+#endif  // USE_KNX
+#ifdef USE_WEBSERVER
+    } else {
+      WSContentSend_PD(HTTP_SNS_TEMP, sht_types, temperature, TempUnit());
+      WSContentSend_PD(HTTP_SNS_HUM, sht_types, humidity);
+#endif  // USE_WEBSERVER
     }
   }
 }
@@ -215,22 +218,24 @@ void ShtShow(boolean json)
  * Interface
 \*********************************************************************************************/
 
-#define XSNS_07
-
-boolean Xsns07(byte function)
+bool Xsns07(uint8_t function)
 {
-  boolean result = false;
+  bool result = false;
 
   if (i2c_flg) {
     switch (function) {
-      case FUNC_PREP_BEFORE_TELEPERIOD:
+//      case FUNC_PREP_BEFORE_TELEPERIOD:  // As this is not a real I2C device it may interfere with other sensors
+      case FUNC_INIT:                      // Move detection to restart only removing interference
         ShtDetect();
+        break;
+      case FUNC_EVERY_SECOND:
+        ShtEverySecond();
         break;
       case FUNC_JSON_APPEND:
         ShtShow(1);
         break;
 #ifdef USE_WEBSERVER
-      case FUNC_WEB_APPEND:
+      case FUNC_WEB_SENSOR:
         ShtShow(0);
         break;
 #endif  // USE_WEBSERVER

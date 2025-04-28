@@ -1,7 +1,7 @@
 /*
   sonoff.ino - Sonoff-Tasmota firmware for iTead Sonoff, Wemos and NodeMCU hardware
 
-  Copyright (C) 2018  Theo Arends
+  Copyright (C) 2019  Theo Arends
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -25,16 +25,18 @@
     - Select IDE Tools - Flash Size: "1M (no SPIFFS)"
   ====================================================*/
 
-#define VERSION                0x050C0004   // 5.12.0d
-
 // Location specific includes
 #include <core_version.h>                   // Arduino_Esp8266 version information (ARDUINO_ESP8266_RELEASE and ARDUINO_ESP8266_RELEASE_2_3_0)
-#include "sonoff.h"                         // Enumeration used in user_config.h
-#include "user_config.h"                    // Fixed user configurable options
-#include "user_config_override.h"           // Configuration overrides for user_config.h
-#include "i18n.h"                           // Language support configured by user_config.h
-#include "sonoff_template.h"                // Hardware configuration
+#include "sonoff_version.h"                 // Sonoff-Tasmota version information
+#include "sonoff.h"                         // Enumeration used in my_user_config.h
+#include "my_user_config.h"                 // Fixed user configurable options
+#ifdef USE_MQTT_TLS
+  #include <t_bearssl.h>                    // we need to include before "sonoff_post.h" to take precedence over the BearSSL version in Arduino
+#endif  // USE_MQTT_TLS
 #include "sonoff_post.h"                    // Configuration overrides for all previous includes
+#include "i18n.h"                           // Language support configured by my_user_config.h
+#include "sonoff_template.h"                // Hardware configuration
+
 
 #ifdef ARDUINO_ESP8266_RELEASE_2_4_0
 #include "lwip/init.h"
@@ -44,18 +46,18 @@
 #endif
 
 // Libraries
-#include <Ticker.h>                         // RTC, Energy, OSWatch
-#include <ESP8266WiFi.h>                    // MQTT, Ota, WifiManager
-#include <ESP8266HTTPClient.h>              // MQTT, Ota
+#include <ESP8266HTTPClient.h>              // Ota
 #include <ESP8266httpUpdate.h>              // Ota
 #include <StreamString.h>                   // Webserver, Updater
 #include <ArduinoJson.h>                    // WemoHue, IRremote, Domoticz
-#ifdef USE_WEBSERVER
-  #include <ESP8266WebServer.h>             // WifiManager, Webserver
-  #include <DNSServer.h>                    // WifiManager
-#endif  // USE_WEBSERVER
+#ifdef USE_ARDUINO_OTA
+  #include <ArduinoOTA.h>                   // Arduino OTA
+  #ifndef USE_DISCOVERY
+  #define USE_DISCOVERY
+  #endif
+#endif  // USE_ARDUINO_OTA
 #ifdef USE_DISCOVERY
-  #include <ESP8266mDNS.h>                  // MQTT, Webserver
+  #include <ESP8266mDNS.h>                  // MQTT, Webserver, Arduino OTA
 #endif  // USE_DISCOVERY
 #ifdef USE_I2C
   #include <Wire.h>                         // I2C support library
@@ -67,118 +69,96 @@
 // Structs
 #include "settings.h"
 
-enum TasmotaCommands {
-  CMND_BACKLOG, CMND_DELAY, CMND_POWER, CMND_STATUS, CMND_STATE, CMND_POWERONSTATE, CMND_PULSETIME,
-  CMND_BLINKTIME, CMND_BLINKCOUNT, CMND_SENSOR, CMND_SAVEDATA, CMND_SETOPTION, CMND_TEMPERATURE_RESOLUTION, CMND_HUMIDITY_RESOLUTION,
-  CMND_PRESSURE_RESOLUTION, CMND_POWER_RESOLUTION, CMND_VOLTAGE_RESOLUTION, CMND_CURRENT_RESOLUTION, CMND_ENERGY_RESOLUTION, CMND_MODULE, CMND_MODULES,
-  CMND_GPIO, CMND_GPIOS, CMND_PWM, CMND_PWMFREQUENCY, CMND_PWMRANGE, CMND_COUNTER, CMND_COUNTERTYPE,
-  CMND_COUNTERDEBOUNCE, CMND_SLEEP, CMND_UPGRADE, CMND_UPLOAD, CMND_OTAURL, CMND_SERIALLOG, CMND_SYSLOG,
-  CMND_LOGHOST, CMND_LOGPORT, CMND_IPADDRESS, CMND_NTPSERVER, CMND_AP, CMND_SSID, CMND_PASSWORD, CMND_HOSTNAME,
-  CMND_WIFICONFIG, CMND_FRIENDLYNAME, CMND_SWITCHMODE, CMND_WEBSERVER, CMND_WEBPASSWORD, CMND_WEBLOG, CMND_EMULATION,
-  CMND_TELEPERIOD, CMND_RESTART, CMND_RESET, CMND_TIMEZONE, CMND_ALTITUDE, CMND_LEDPOWER, CMND_LEDSTATE,
-  CMND_CFGDUMP, CMND_I2CSCAN, CMND_EXCEPTION };
-const char kTasmotaCommands[] PROGMEM =
-  D_CMND_BACKLOG "|" D_CMND_DELAY "|" D_CMND_POWER "|" D_CMND_STATUS "|" D_CMND_STATE "|"  D_CMND_POWERONSTATE "|" D_CMND_PULSETIME "|"
-  D_CMND_BLINKTIME "|" D_CMND_BLINKCOUNT "|" D_CMND_SENSOR "|" D_CMND_SAVEDATA "|" D_CMND_SETOPTION "|" D_CMND_TEMPERATURE_RESOLUTION "|" D_CMND_HUMIDITY_RESOLUTION "|"
-  D_CMND_PRESSURE_RESOLUTION "|" D_CMND_POWER_RESOLUTION "|" D_CMND_VOLTAGE_RESOLUTION "|" D_CMND_CURRENT_RESOLUTION "|" D_CMND_ENERGY_RESOLUTION "|" D_CMND_MODULE "|" D_CMND_MODULES "|"
-  D_CMND_GPIO "|" D_CMND_GPIOS "|" D_CMND_PWM "|" D_CMND_PWMFREQUENCY "|" D_CMND_PWMRANGE "|" D_CMND_COUNTER "|"  D_CMND_COUNTERTYPE "|"
-  D_CMND_COUNTERDEBOUNCE "|" D_CMND_SLEEP "|" D_CMND_UPGRADE "|" D_CMND_UPLOAD "|" D_CMND_OTAURL "|" D_CMND_SERIALLOG "|" D_CMND_SYSLOG "|"
-  D_CMND_LOGHOST "|" D_CMND_LOGPORT "|" D_CMND_IPADDRESS "|" D_CMND_NTPSERVER "|" D_CMND_AP "|" D_CMND_SSID "|" D_CMND_PASSWORD "|" D_CMND_HOSTNAME "|"
-  D_CMND_WIFICONFIG "|" D_CMND_FRIENDLYNAME "|" D_CMND_SWITCHMODE "|" D_CMND_WEBSERVER "|" D_CMND_WEBPASSWORD "|" D_CMND_WEBLOG "|" D_CMND_EMULATION "|"
-  D_CMND_TELEPERIOD "|" D_CMND_RESTART "|" D_CMND_RESET "|" D_CMND_TIMEZONE "|" D_CMND_ALTITUDE "|" D_CMND_LEDPOWER "|" D_CMND_LEDSTATE "|"
-  D_CMND_CFGDUMP "|" D_CMND_I2CSCAN
-#ifdef DEBUG_THEO
-  "|" D_CMND_EXCEPTION
-#endif
-  ;
-
-const char kOptionOff[] PROGMEM = "OFF|" D_OFF "|" D_FALSE "|" D_STOP "|" D_CELSIUS ;
-const char kOptionOn[] PROGMEM = "ON|" D_ON "|" D_TRUE "|" D_START "|" D_FAHRENHEIT "|" D_USER ;
-const char kOptionToggle[] PROGMEM = "TOGGLE|" D_TOGGLE "|" D_ADMIN ;
-const char kOptionBlink[] PROGMEM = "BLINK|" D_BLINK ;
-const char kOptionBlinkOff[] PROGMEM = "BLINKOFF|" D_BLINKOFF ;
+const char kSleepMode[] PROGMEM = "Dynamic|Normal";
 
 // Global variables
-int baudrate = APP_BAUDRATE;                // Serial interface baud rate
 SerialConfig serial_config = SERIAL_8N1;    // Serial interface configuration 8 data bits, No parity, 1 stop bit
-byte serial_in_byte;                        // Received byte
-int serial_in_byte_counter = 0;             // Index in receive buffer
-byte dual_hex_code = 0;                     // Sonoff dual input flag
-uint16_t dual_button_code = 0;              // Sonoff dual received code
-int16_t save_data_counter;                  // Counter and flag for config save to Flash
-uint8_t fallback_topic_flag = 0;            // Use Topic or FallbackTopic
-unsigned long state_loop_timer = 0;         // State loop timer
-int state = 0;                              // State per second flag
-int ota_state_flag = 0;                     // OTA state flag
-int ota_result = 0;                         // OTA result
-byte ota_retry_counter = OTA_ATTEMPTS;      // OTA retry counter
-char *ota_url;                              // OTA url string
-int restart_flag = 0;                       // Sonoff restart flag
-int wifi_state_flag = WIFI_RESTART;         // Wifi state flag
-uint32_t uptime = 0;                        // Counting every second until 4294967295 = 130 year
-boolean latest_uptime_flag = true;          // Signal latest uptime
-int tele_period = 0;                        // Tele period timer
-byte web_log_index = 1;                     // Index in Web log buffer (should never be 0)
-byte reset_web_log_flag = 0;                // Reset web console log
-byte devices_present = 0;                   // Max number of devices supported
-int status_update_timer = 0;                // Refresh initial status
-uint16_t pulse_timer[MAX_PULSETIMERS] = { 0 }; // Power off timer
-uint16_t blink_timer = 0;                   // Power cycle timer
-uint16_t blink_counter = 0;                 // Number of blink cycles
-power_t blink_power;                        // Blink power state
-power_t blink_mask = 0;                     // Blink relay active mask
-power_t blink_powersave;                    // Blink start power save state
-uint16_t mqtt_cmnd_publish = 0;             // ignore flag for publish command
-power_t latching_power = 0;                 // Power state at latching start
-uint8_t latching_relay_pulse = 0;           // Latching relay pulse timer
-uint8_t backlog_index = 0;                  // Command backlog index
-uint8_t backlog_pointer = 0;                // Command backlog pointer
-uint8_t backlog_mutex = 0;                  // Command backlog pending
-uint16_t backlog_delay = 0;                 // Command backlog delay
-uint8_t interlock_mutex = 0;                // Interlock power command pending
-
-#ifdef USE_MQTT_TLS
-  WiFiClientSecure EspClient;               // Wifi Secure Client
-#else
-  WiFiClient EspClient;                     // Wifi Client
-#endif
 
 WiFiUDP PortUdp;                            // UDP Syslog and Alexa
 
+unsigned long feature_drv1;                 // Compiled driver feature map
+unsigned long feature_drv2;                 // Compiled driver feature map
+unsigned long feature_sns1;                 // Compiled sensor feature map
+unsigned long feature_sns2;                 // Compiled sensor feature map
+unsigned long feature5;                     // Compiled feature map
+unsigned long serial_polling_window = 0;    // Serial polling window
+unsigned long state_second = 0;             // State second timer
+unsigned long state_50msecond = 0;          // State 50msecond timer
+unsigned long state_100msecond = 0;         // State 100msecond timer
+unsigned long state_250msecond = 0;         // State 250msecond timer
+unsigned long pulse_timer[MAX_PULSETIMERS] = { 0 }; // Power off timer
+unsigned long blink_timer = 0;              // Power cycle timer
+unsigned long backlog_delay = 0;            // Command backlog delay
 power_t power = 0;                          // Current copy of Settings.power
-byte syslog_level;                          // Current copy of Settings.syslog_level
-uint16_t syslog_timer = 0;                  // Timer to re-enable syslog_level
-byte seriallog_level;                       // Current copy of Settings.seriallog_level
-uint16_t seriallog_timer = 0;               // Timer to disable Seriallog
-uint8_t sleep;                              // Current copy of Settings.sleep
-uint8_t stop_flash_rotate = 0;              // Allow flash configuration rotation
-
-int blinks = 201;                           // Number of LED blinks
-uint8_t blinkstate = 0;                     // LED state
-
-uint8_t blockgpio0 = 4;                     // Block GPIO0 for 4 seconds after poweron to workaround Wemos D1 RTS circuit
-uint8_t lastbutton[MAX_KEYS] = { NOT_PRESSED, NOT_PRESSED, NOT_PRESSED, NOT_PRESSED };  // Last button states
-uint16_t holdbutton[MAX_KEYS] = { 0 };      // Timer for button hold
-uint8_t multiwindow[MAX_KEYS] = { 0 };      // Max time between button presses to record press count
-uint8_t multipress[MAX_KEYS] = { 0 };       // Number of button presses within multiwindow
-uint8_t lastwallswitch[MAX_SWITCHES];       // Last wall switch states
-uint8_t holdwallswitch[MAX_SWITCHES] = { 0 };  // Timer for wallswitch push button hold
-
-mytmplt my_module;                          // Active copy of Module name and GPIOs
-uint8_t pin[GPIO_MAX];                      // Possible pin configurations
+power_t last_power = 0;                     // Last power set state
+power_t blink_power;                        // Blink power state
+power_t blink_mask = 0;                     // Blink relay active mask
+power_t blink_powersave;                    // Blink start power save state
+power_t latching_power = 0;                 // Power state at latching start
 power_t rel_inverted = 0;                   // Relay inverted flag (1 = (0 = On, 1 = Off))
+int baudrate = APP_BAUDRATE;                // Serial interface baud rate
+int serial_in_byte_counter = 0;             // Index in receive buffer
+int ota_state_flag = 0;                     // OTA state flag
+int ota_result = 0;                         // OTA result
+int restart_flag = 0;                       // Sonoff restart flag
+int wifi_state_flag = WIFI_RESTART;         // Wifi state flag
+int tele_period = 1;                        // Tele period timer
+int blinks = 201;                           // Number of LED blinks
+uint32_t uptime = 0;                        // Counting every second until 4294967295 = 130 year
+uint32_t loop_load_avg = 0;                 // Indicative loop load average
+uint32_t global_update = 0;                 // Timestamp of last global temperature and humidity update
+uint32_t web_log_index = 1;                  // Index in Web log buffer (should never be 0)
+float global_temperature = 9999;               // Provide a global temperature to be used by some sensors
+float global_humidity = 0;                  // Provide a global humidity to be used by some sensors
+float global_pressure = 0;                  // Provide a global pressure to be used by some sensors
+char *ota_url;                              // OTA url string pointer
+uint16_t mqtt_cmnd_publish = 0;             // ignore flag for publish command
+uint16_t blink_counter = 0;                 // Number of blink cycles
+uint16_t seriallog_timer = 0;               // Timer to disable Seriallog
+uint16_t syslog_timer = 0;                  // Timer to re-enable syslog_level
+int16_t save_data_counter;                  // Counter and flag for config save to Flash
+RulesBitfield rules_flag;                   // Rule state flags (16 bits)
+uint8_t state_250mS = 0;                    // State 250msecond per second flag
+uint8_t latching_relay_pulse = 0;           // Latching relay pulse timer
+uint8_t sleep;                              // Current copy of Settings.sleep
+uint8_t blinkspeed = 1;                     // LED blink rate
+uint8_t pin[GPIO_MAX];                      // Possible pin configurations
+uint8_t active_device = 1;                  // Active device in ExecuteCommandPower
+uint8_t leds_present = 0;                   // Max number of LED supported
 uint8_t led_inverted = 0;                   // LED inverted flag (1 = (0 = On, 1 = Off))
+uint8_t led_power = 0;                      // LED power state
+uint8_t ledlnk_inverted = 0;                // Link LED inverted flag (1 = (0 = On, 1 = Off))
 uint8_t pwm_inverted = 0;                   // PWM inverted flag (1 = inverted)
-uint8_t dht_flg = 0;                        // DHT configured
-uint8_t energy_flg = 1;                     // Energy monitor configured
-uint8_t i2c_flg = 0;                        // I2C configured
-uint8_t spi_flg = 0;                        // SPI configured
+uint8_t energy_flg = 0;                     // Energy monitor configured
 uint8_t light_type = 0;                     // Light types
+uint8_t serial_in_byte;                     // Received byte
+uint8_t ota_retry_counter = OTA_ATTEMPTS;   // OTA retry counter
+uint8_t devices_present = 0;                // Max number of devices supported
+uint8_t seriallog_level;                    // Current copy of Settings.seriallog_level
+uint8_t syslog_level;                       // Current copy of Settings.syslog_level
+uint8_t my_module_type;                     // Current copy of Settings.module or user template type
+uint8_t my_adc0;                            // Active copy of Module ADC0
+uint8_t last_source = 0;                    // Last command source
+uint8_t shutters_present = 0;               // Number of actual define shutters
+//uint8_t mdns_delayed_start = 0;             // mDNS delayed start
+bool serial_local = false;                  // Handle serial locally;
+bool fallback_topic_flag = false;           // Use Topic or FallbackTopic
+bool backlog_mutex = false;                 // Command backlog pending
+bool interlock_mutex = false;               // Interlock power command pending
+bool stop_flash_rotate = false;             // Allow flash configuration rotation
+bool blinkstate = false;                    // LED state
+//bool latest_uptime_flag = true;             // Signal latest uptime
 bool pwm_present = false;                   // Any PWM channel configured with SetOption15 0
-
-boolean mdns_begun = false;
-
+bool i2c_flg = false;                       // I2C configured
+bool spi_flg = false;                       // SPI configured
+bool soft_spi_flg = false;                  // Software SPI configured
+bool ntp_force_sync = false;                // Force NTP sync
+bool ntp_synced_message = false;            // NTP synced message flag
+myio my_module;                             // Active copy of Module GPIOs (17 x 8 bits)
+gpio_flag my_module_flag;                   // Active copy of Template GPIO flags
+StateBitfield global_state;                 // Global states (currently Wifi and Mqtt) (8 bits)
 char my_version[33];                        // Composed version string
+char my_image[33];                          // Code image and/or commit
 char my_hostname[33];                       // Composed Wifi hostname
 char mqtt_client[33];                       // Composed MQTT Clientname
 char mqtt_topic[33];                        // Composed MQTT topic
@@ -186,32 +166,42 @@ char serial_in_buffer[INPUT_BUFFER_SIZE];   // Receive buffer
 char mqtt_data[MESSZ];                      // MQTT publish buffer and web page ajax buffer
 char log_data[LOGSZ];                       // Logging
 char web_log[WEB_LOG_SIZE] = {'\0'};        // Web log buffer
-String backlog[MAX_BACKLOG];                // Command backlog
+#ifdef SUPPORT_IF_STATEMENT
+  #include <LinkedList.h>
+  LinkedList<String> backlog;                // Command backlog implemented with LinkedList
+  #define BACKLOG_EMPTY (backlog.size() == 0)
+#else
+  uint8_t backlog_index = 0;                  // Command backlog index
+  uint8_t backlog_pointer = 0;                // Command backlog pointer
+  String backlog[MAX_BACKLOG];                // Command backlog buffer
+  #define BACKLOG_EMPTY (backlog_pointer == backlog_index)
+#endif
 
 /********************************************************************************************/
 
-char* GetMqttClient(char* output, const char* input, int size)
+char* Format(char* output, const char* input, int size)
 {
   char *token;
-  uint8_t digits = 0;
+  uint32_t digits = 0;
 
-  if (strstr(input, "%")) {
+  if (strstr(input, "%") != nullptr) {
     strlcpy(output, input, size);
     token = strtok(output, "%");
     if (strstr(input, "%") == input) {
       output[0] = '\0';
     } else {
-      token = strtok(NULL, "");
+      token = strtok(nullptr, "");
     }
-    if (token != NULL) {
+    if (token != nullptr) {
       digits = atoi(token);
       if (digits) {
+        char tmp[size];
         if (strchr(token, 'd')) {
-          snprintf_P(output, size, PSTR("%s%c0%dd"), output, '%', digits);
-          snprintf_P(output, size, output, ESP.getChipId() & 0x1fff);       // %04d - short chip ID in dec, like in hostname
+          snprintf_P(tmp, size, PSTR("%s%c0%dd"), output, '%', digits);
+          snprintf_P(output, size, tmp, ESP.getChipId() & 0x1fff);            // %04d - short chip ID in dec, like in hostname
         } else {
-          snprintf_P(output, size, PSTR("%s%c0%dX"), output, '%', digits);
-          snprintf_P(output, size, output, ESP.getChipId());                // %06X - full chip ID in hex
+          snprintf_P(tmp, size, PSTR("%s%c0%dX"), output, '%', digits);
+          snprintf_P(output, size, tmp, ESP.getChipId());                   // %06X - full chip ID in hex
         }
       } else {
         if (strchr(token, 'd')) {
@@ -229,44 +219,54 @@ char* GetMqttClient(char* output, const char* input, int size)
 
 char* GetOtaUrl(char *otaurl, size_t otaurl_size)
 {
-  if (strstr(Settings.ota_url, "%04d") != NULL) {     // OTA url contains placeholder for chip ID
+  if (strstr(Settings.ota_url, "%04d") != nullptr) {     // OTA url contains placeholder for chip ID
     snprintf(otaurl, otaurl_size, Settings.ota_url, ESP.getChipId() & 0x1fff);
   }
-  else if (strstr(Settings.ota_url, "%d") != NULL) {  // OTA url contains placeholder for chip ID
+  else if (strstr(Settings.ota_url, "%d") != nullptr) {  // OTA url contains placeholder for chip ID
     snprintf_P(otaurl, otaurl_size, Settings.ota_url, ESP.getChipId());
   }
   else {
-    snprintf(otaurl, otaurl_size, Settings.ota_url);
+    strlcpy(otaurl, Settings.ota_url, otaurl_size);
   }
   return otaurl;
 }
 
-void GetTopic_P(char *stopic, byte prefix, char *topic, const char* subtopic)
+char* GetTopic_P(char *stopic, uint32_t prefix, char *topic, const char* subtopic)
 {
   /* prefix 0 = Cmnd
      prefix 1 = Stat
      prefix 2 = Tele
+     prefix 4 = Cmnd fallback
+     prefix 5 = Stat fallback
+     prefix 6 = Tele fallback
   */
   char romram[CMDSZ];
   String fulltopic;
 
   snprintf_P(romram, sizeof(romram), subtopic);
-  if (fallback_topic_flag) {
+  if (fallback_topic_flag || (prefix > 3)) {
+    prefix &= 3;
     fulltopic = FPSTR(kPrefixes[prefix]);
     fulltopic += F("/");
     fulltopic += mqtt_client;
+    fulltopic += F("_fb");                    // cmnd/<mqttclient>_fb
   } else {
     fulltopic = Settings.mqtt_fulltopic;
-    if ((0 == prefix) && (-1 == fulltopic.indexOf(F(MQTT_TOKEN_PREFIX)))) {
-      fulltopic += F("/" MQTT_TOKEN_PREFIX);  // Need prefix for commands to handle mqtt topic loops
+    if ((0 == prefix) && (-1 == fulltopic.indexOf(FPSTR(MQTT_TOKEN_PREFIX)))) {
+      fulltopic += F("/");
+      fulltopic += FPSTR(MQTT_TOKEN_PREFIX);  // Need prefix for commands to handle mqtt topic loops
     }
-    for (byte i = 0; i < 3; i++) {
+    for (uint32_t i = 0; i < 3; i++) {
       if ('\0' == Settings.mqtt_prefix[i][0]) {
         snprintf_P(Settings.mqtt_prefix[i], sizeof(Settings.mqtt_prefix[i]), kPrefixes[i]);
       }
     }
-    fulltopic.replace(F(MQTT_TOKEN_PREFIX), Settings.mqtt_prefix[prefix]);
-    fulltopic.replace(F(MQTT_TOKEN_TOPIC), topic);
+    fulltopic.replace(FPSTR(MQTT_TOKEN_PREFIX), Settings.mqtt_prefix[prefix]);
+    fulltopic.replace(FPSTR(MQTT_TOKEN_TOPIC), topic);
+    fulltopic.replace(F("%hostname%"), my_hostname);
+    String token_id = WiFi.macAddress();
+    token_id.replace(":", "");
+    fulltopic.replace(F("%id%"), token_id);
   }
   fulltopic.replace(F("#"), "");
   fulltopic.replace(F("//"), "/");
@@ -274,9 +274,15 @@ void GetTopic_P(char *stopic, byte prefix, char *topic, const char* subtopic)
     fulltopic += "/";
   }
   snprintf_P(stopic, TOPSZ, PSTR("%s%s"), fulltopic.c_str(), romram);
+  return stopic;
 }
 
-char* GetStateText(byte state)
+char* GetFallbackTopic_P(char *stopic, uint32_t prefix, const char* subtopic)
+{
+  return GetTopic_P(stopic, prefix +4, nullptr, subtopic);
+}
+
+char* GetStateText(uint32_t state)
 {
   if (state > 3) {
     state = 1;
@@ -286,49 +292,67 @@ char* GetStateText(byte state)
 
 /********************************************************************************************/
 
-void SetLatchingRelay(power_t power, uint8_t state)
+void SetLatchingRelay(power_t lpower, uint32_t state)
 {
-  power &= 1;
-  if (2 == state) {           // Reset relay
-    state = 0;
-    latching_power = power;
-    latching_relay_pulse = 0;
+  // power xx00 - toggle REL1 (Off) and REL3 (Off) - device 1 Off, device 2 Off
+  // power xx01 - toggle REL2 (On)  and REL3 (Off) - device 1 On,  device 2 Off
+  // power xx10 - toggle REL1 (Off) and REL4 (On)  - device 1 Off, device 2 On
+  // power xx11 - toggle REL2 (On)  and REL4 (On)  - device 1 On,  device 2 On
+
+  if (state && !latching_relay_pulse) {  // Set latching relay to power if previous pulse has finished
+    latching_power = lpower;
+    latching_relay_pulse = 2;            // max 200mS (initiated by stateloop())
   }
-  else if (state && !latching_relay_pulse) {  // Set port power to On
-    latching_power = power;
-    latching_relay_pulse = 2;  // max 200mS (initiated by stateloop())
-  }
-  if (pin[GPIO_REL1 +latching_power] < 99) {
-    digitalWrite(pin[GPIO_REL1 +latching_power], bitRead(rel_inverted, latching_power) ? !state : state);
+
+  for (uint32_t i = 0; i < devices_present; i++) {
+    uint32_t port = (i << 1) + ((latching_power >> i) &1);
+    if (pin[GPIO_REL1 +port] < 99) {
+      digitalWrite(pin[GPIO_REL1 +port], bitRead(rel_inverted, port) ? !state : state);
+    }
   }
 }
 
-void SetDevicePower(power_t rpower)
+void SetDevicePower(power_t rpower, uint32_t source)
 {
-  uint8_t state;
+  ShowSource(source);
+  last_source = source;
 
   if (POWER_ALL_ALWAYS_ON == Settings.poweronstate) {  // All on and stay on
     power = (1 << devices_present) -1;
     rpower = power;
   }
-  if (Settings.flag.interlock) {     // Allow only one or no relay set
-    power_t mask = 1;
-    uint8_t count = 0;
-    for (byte i = 0; i < devices_present; i++) {
-      if (rpower & mask) {
-        count++;
+
+  if (Settings.flag.interlock) {          // Allow only one or no relay set
+    for (uint32_t i = 0; i < MAX_INTERLOCKS; i++) {
+      power_t mask = 1;
+      uint32_t count = 0;
+      for (uint32_t j = 0; j < devices_present; j++) {
+        if ((Settings.interlock[i] & mask) && (rpower & mask)) {
+          count++;
+        }
+        mask <<= 1;
       }
-      mask <<= 1;
-    }
-    if (count > 1) {
-      power = 0;
-      rpower = 0;
+      if (count > 1) {
+        mask = ~Settings.interlock[i];    // Turn interlocked group off as there would be multiple relays on
+        power &= mask;
+        rpower &= mask;
+      }
     }
   }
 
-  XdrvSetPower(rpower);
+  if (rpower) {                           // Any power set
+    last_power = rpower;
+  }
 
-  if ((SONOFF_DUAL == Settings.module) || (CH4 == Settings.module)) {
+  XdrvMailbox.index = rpower;
+  XdrvCall(FUNC_SET_POWER);               // Signal power state
+
+  XdrvMailbox.index = rpower;
+  XdrvMailbox.payload = source;
+  if (XdrvCall(FUNC_SET_DEVICE_POWER)) {  // Set power state and stop if serviced
+    // Serviced
+  }
+  else if ((SONOFF_DUAL == my_module_type) || (CH4 == my_module_type)) {
     Serial.write(0xA0);
     Serial.write(0x04);
     Serial.write(rpower &0xFF);
@@ -336,12 +360,12 @@ void SetDevicePower(power_t rpower)
     Serial.write('\n');
     Serial.flush();
   }
-  else if (EXS_RELAY == Settings.module) {
+  else if (EXS_RELAY == my_module_type) {
     SetLatchingRelay(rpower, 1);
   }
   else {
-    for (byte i = 0; i < devices_present; i++) {
-      state = rpower &1;
+    for (uint32_t i = 0; i < devices_present; i++) {
+      power_t state = rpower &1;
       if ((i < MAX_RELAYS) && (pin[GPIO_REL1 +i] < 99)) {
         digitalWrite(pin[GPIO_REL1 +i], bitRead(rel_inverted, i) ? !state : state);
       }
@@ -350,851 +374,236 @@ void SetDevicePower(power_t rpower)
   }
 }
 
-void SetLedPower(uint8_t state)
+void RestorePower(bool publish_power, uint32_t source)
 {
-  if (state) {
-    state = 1;
-  }
-  digitalWrite(pin[GPIO_LED1], (bitRead(led_inverted, 0)) ? !state : state);
-}
-
-/********************************************************************************************/
-
-void MqttDataHandler(char* topic, byte* data, unsigned int data_len)
-{
-  char *str;
-
-  if (!strcmp(Settings.mqtt_prefix[0],Settings.mqtt_prefix[1])) {
-    str = strstr(topic,Settings.mqtt_prefix[0]);
-    if ((str == topic) && mqtt_cmnd_publish) {
-      if (mqtt_cmnd_publish > 8) {
-        mqtt_cmnd_publish -= 8;
-      } else {
-        mqtt_cmnd_publish = 0;
-      }
-      return;
+  if (power != last_power) {
+    SetDevicePower(last_power, source);
+    if (publish_power) {
+      MqttPublishAllPowerState();
     }
   }
+}
 
-  char topicBuf[TOPSZ];
-  char dataBuf[data_len+1];
-  char command [CMDSZ];
-  char stemp1[TOPSZ];
-  char *p;
-  char *type = NULL;
-  byte ptype = 0;
-  byte jsflg = 0;
-  byte lines = 1;
-  uint8_t grpflg = 0;
-  uint16_t i = 0;
-  uint16_t index;
-  uint32_t address;
+void SetAllPower(uint32_t state, uint32_t source)
+{
+// state 0 = POWER_OFF = Relay Off
+// state 1 = POWER_ON = Relay On (turn off after Settings.pulse_timer * 100 mSec if enabled)
+// state 2 = POWER_TOGGLE = Toggle relay
+// state 8 = POWER_OFF_NO_STATE = Relay Off and no publishPowerState
+// state 9 = POWER_ON_NO_STATE = Relay On and no publishPowerState
+// state 10 = POWER_TOGGLE_NO_STATE = Toggle relay and no publishPowerState
+// state 16 = POWER_SHOW_STATE = Show power state
 
-  strncpy(topicBuf, topic, sizeof(topicBuf));
-  for (i = 0; i < data_len; i++) {
-    if (!isspace(data[i])) {
+  bool publish_power = true;
+  if ((state >= POWER_OFF_NO_STATE) && (state <= POWER_TOGGLE_NO_STATE)) {
+    state &= 3;                           // POWER_OFF, POWER_ON or POWER_TOGGLE
+    publish_power = false;
+  }
+  if ((state >= POWER_OFF) && (state <= POWER_TOGGLE)) {
+    power_t all_on = (1 << devices_present) -1;
+    switch (state) {
+    case POWER_OFF:
+      power = 0;
       break;
+    case POWER_ON:
+      power = all_on;
+      break;
+    case POWER_TOGGLE:
+      power ^= all_on;                    // Complement current state
+    }
+    SetDevicePower(power, source);
+  }
+  if (publish_power) {
+    MqttPublishAllPowerState();
+  }
+}
+
+void SetLedPowerIdx(uint32_t led, uint32_t state)
+{
+  if ((99 == pin[GPIO_LEDLNK]) && (0 == led)) {  // Legacy - LED1 is link led only if LED2 is present
+    if (pin[GPIO_LED2] < 99) {
+      led = 1;
     }
   }
-  data_len -= i;
-  memcpy(dataBuf, data +i, sizeof(dataBuf));
-  dataBuf[sizeof(dataBuf)-1] = 0;
-
-  snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_RESULT D_RECEIVED_TOPIC " %s, " D_DATA_SIZE " %d, " D_DATA " %s"),
-    topicBuf, data_len, dataBuf);
-  AddLog(LOG_LEVEL_DEBUG_MORE);
-//  if (LOG_LEVEL_DEBUG_MORE <= seriallog_level) Serial.println(dataBuf);
-
-  if (XdrvMqttData(topicBuf, sizeof(topicBuf), dataBuf, sizeof(dataBuf))) return;
-
-  grpflg = (strstr(topicBuf, Settings.mqtt_grptopic) != NULL);
-  fallback_topic_flag = (strstr(topicBuf, mqtt_client) != NULL);
-  type = strrchr(topicBuf, '/') +1;  // Last part of received topic is always the command (type)
-
-  index = 1;
-  if (type != NULL) {
-    for (i = 0; i < strlen(type); i++) {
-      type[i] = toupper(type[i]);
+  if (pin[GPIO_LED1 + led] < 99) {
+    uint32_t mask = 1 << led;
+    if (state) {
+      state = 1;
+      led_power |= mask;
+    } else {
+      led_power &= (0xFF ^ mask);
     }
-    while (isdigit(type[i-1])) {
-      i--;
-    }
-    if (i < strlen(type)) {
-      index = atoi(type +i);
-    }
-    type[i] = '\0';
+    digitalWrite(pin[GPIO_LED1 + led], bitRead(led_inverted, led) ? !state : state);
   }
+}
 
-  snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_RESULT D_GROUP " %d, " D_INDEX " %d, " D_COMMAND " %s, " D_DATA " %s"),
-    grpflg, index, type, dataBuf);
-  AddLog(LOG_LEVEL_DEBUG);
-
-  if (type != NULL) {
-    snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_JSON_COMMAND "\":\"" D_JSON_ERROR "\"}"));
-    if (Settings.ledstate &0x02) {
-      blinks++;
-    }
-
-    if (!strcmp(dataBuf,"?")) {
-      data_len = 0;
-    }
-    int16_t payload = -99;               // No payload
-    uint16_t payload16 = 0;
-    long lnum = strtol(dataBuf, &p, 10);
-    if (p != dataBuf) {
-      payload = (int16_t) lnum;          // -32766 - 32767
-      payload16 = (uint16_t) lnum;       // 0 - 65535
-    }
-    backlog_delay = MIN_BACKLOG_DELAY;   // Reset backlog delay
-
-    if ((GetCommandCode(command, sizeof(command), dataBuf, kOptionOff) >= 0) || !strcasecmp(dataBuf, Settings.state_text[0])) {
-      payload = 0;
-    }
-    if ((GetCommandCode(command, sizeof(command), dataBuf, kOptionOn) >= 0) || !strcasecmp(dataBuf, Settings.state_text[1])) {
-      payload = 1;
-    }
-    if ((GetCommandCode(command, sizeof(command), dataBuf, kOptionToggle) >= 0) || !strcasecmp(dataBuf, Settings.state_text[2])) {
-      payload = 2;
-    }
-    if (GetCommandCode(command, sizeof(command), dataBuf, kOptionBlink) >= 0) {
-      payload = 3;
-    }
-    if (GetCommandCode(command, sizeof(command), dataBuf, kOptionBlinkOff) >= 0) {
-      payload = 4;
-    }
-
-//    snprintf_P(log_data, sizeof(log_data), PSTR("RSLT: Payload %d, Payload16 %d"), payload, payload16);
-//    AddLog(LOG_LEVEL_DEBUG);
-
-    int command_code = GetCommandCode(command, sizeof(command), type, kTasmotaCommands);
-    if (CMND_BACKLOG == command_code) {
-      if (data_len) {
-        char *blcommand = strtok(dataBuf, ";");
-        while (blcommand != NULL) {
-          backlog[backlog_index] = String(blcommand);
-          backlog_index++;
-/*
-          if (backlog_index >= MAX_BACKLOG) {
-            backlog_index = 0;
-          }
-*/
-          backlog_index &= 0xF;
-          blcommand = strtok(NULL, ";");
-        }
-        snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_SVALUE, command, D_JSON_APPENDED);
-      } else {
-        uint8_t blflag = (backlog_pointer == backlog_index);
-        backlog_pointer = backlog_index;
-        snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_SVALUE, command, blflag ? D_JSON_EMPTY : D_JSON_ABORTED);
-      }
-    }
-    else if (CMND_DELAY == command_code) {
-      if ((payload >= MIN_BACKLOG_DELAY) && (payload <= 3600)) {
-        backlog_delay = payload;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE, command, backlog_delay);
-    }
-    else if ((CMND_POWER == command_code) && (index > 0) && (index <= devices_present)) {
-      if ((payload < 0) || (payload > 4)) {
-        payload = 9;
-      }
-      ExecuteCommandPower(index, payload);
-      fallback_topic_flag = 0;
-      return;
-    }
-    else if (CMND_STATUS == command_code) {
-      if ((payload < 0) || (payload > MAX_STATUS)) {
-        payload = 99;
-      }
-      PublishStatus(payload);
-      fallback_topic_flag = 0;
-      return;
-    }
-    else if (CMND_STATE == command_code) {
-      mqtt_data[0] = '\0';
-      MqttShowState();
-    }
-    else if ((CMND_POWERONSTATE == command_code) && (Settings.module != MOTOR)) {
-      /* 0 = Keep relays off after power on
-       * 1 = Turn relays on after power on, if PulseTime set wait for PulseTime seconds, and turn relays off
-       * 2 = Toggle relays after power on
-       * 3 = Set relays to last saved state after power on
-       * 4 = Turn relays on and disable any relay control (used for Sonoff Pow to always measure power)
-       * 5 = Keep relays off after power on, if PulseTime set wait for PulseTime seconds, and turn relays on
-       */
-      if ((payload >= POWER_ALL_OFF) && (payload <= POWER_ALL_OFF_PULSETIME_ON)) {
-        Settings.poweronstate = payload;
-        if (POWER_ALL_ALWAYS_ON == Settings.poweronstate) {
-          for (byte i = 1; i <= devices_present; i++) {
-            ExecuteCommandPower(i, POWER_ON);
-          }
-        }
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE, command, Settings.poweronstate);
-    }
-    else if ((CMND_PULSETIME == command_code) && (index > 0) && (index <= MAX_PULSETIMERS)) {
-      if (data_len > 0) {
-        Settings.pulse_timer[index -1] = payload16;  // 0 - 65535
-        pulse_timer[index -1] = 0;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_INDEX_NVALUE, command, index, Settings.pulse_timer[index -1]);
-    }
-    else if (CMND_BLINKTIME == command_code) {
-      if ((payload > 2) && (payload <= 3600)) {
-        Settings.blinktime = payload;
-        if (blink_timer) {
-          blink_timer = Settings.blinktime;
-        }
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE, command, Settings.blinktime);
-    }
-    else if (CMND_BLINKCOUNT == command_code) {
-      if (data_len > 0) {
-        Settings.blinkcount = payload16;  // 0 - 65535
-        if (blink_counter) {
-          blink_counter = Settings.blinkcount *2;
-        }
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE, command, Settings.blinkcount);
-    }
-    else if (CMND_SAVEDATA == command_code) {
-      if ((payload >= 0) && (payload <= 3600)) {
-        Settings.save_data = payload;
-        save_data_counter = Settings.save_data;
-      }
-      SettingsSaveAll();
-      if (Settings.save_data > 1) {
-        snprintf_P(stemp1, sizeof(stemp1), PSTR(D_JSON_EVERY " %d " D_UNIT_SECOND), Settings.save_data);
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_SVALUE, command, (Settings.save_data > 1) ? stemp1 : GetStateText(Settings.save_data));
-    }
-    else if (CMND_SENSOR == command_code) {
-      XdrvMailbox.topic = command;
-      XdrvMailbox.index = index;
-      XdrvMailbox.payload = payload;
-      XdrvMailbox.data_len = data_len;
-      XdrvMailbox.data = dataBuf;
-      XsnsCall(FUNC_COMMAND);
-//      if (!XsnsCall(FUNC_COMMAND)) {
-//        type = NULL;
-//      }
-    }
-    else if ((CMND_SETOPTION == command_code) && ((index <= 21) || ((index > 31) && (index <= P_MAX_PARAM8 + 31)))) {
-      if (index <= 31) {
-        ptype = 0;   // SetOption0 .. 31
-      } else {
-        ptype = 1;   // SetOption32 ..
-        index = index -32;
-      }
-      if (payload >= 0) {
-        if (0 == ptype) {  // SetOption0 .. 31
-          if (payload <= 1) {
-            switch (index) {
-              case 3:   // mqtt
-              case 15:  // pwm_control
-              case 19:  // hass_discovery
-                restart_flag = 2;
-              case 0:   // save_state
-              case 1:   // button_restrict
-              case 2:   // value_units
-              case 4:   // mqtt_response
-              case 8:   // temperature_conversion
-              case 10:  // mqtt_offline
-              case 11:  // button_swap
-              case 12:  // stop_flash_rotate
-              case 13:  // button_single
-              case 14:  // interlock
-              case 16:  // ws_clock_reverse
-              case 17:  // decimal_text
-              case 18:  // light_signal
-              case 20:  // not_power_linked
-              case 21:  // no_power_on_check
-                bitWrite(Settings.flag.data, index, payload);
-            }
-            if (12 == index) {  // stop_flash_rotate
-              stop_flash_rotate = payload;
-              SettingsSave(2);
-            }
-          }
-        }
-        else {  // SetOption32 ..
-          switch (index) {
-            case P_HOLD_TIME:
-              if ((payload >= 1) && (payload <= 250)) {
-                Settings.param[P_HOLD_TIME] = payload;
-              }
-              break;
-            case P_MAX_POWER_RETRY:
-              if ((payload >= 1) && (payload <= 250)) {
-                Settings.param[P_MAX_POWER_RETRY] = payload;
-              }
-              break;
-          }
-        }
-      }
-      if (ptype) {
-        snprintf_P(stemp1, sizeof(stemp1), PSTR("%d"), Settings.param[index]);
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_INDEX_SVALUE, command, (ptype) ? index +32 : index, (ptype) ? stemp1 : GetStateText(bitRead(Settings.flag.data, index)));
-    }
-    else if (CMND_TEMPERATURE_RESOLUTION == command_code) {
-      if ((payload >= 0) && (payload <= 3)) {
-        Settings.flag2.temperature_resolution = payload;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE, command, Settings.flag2.temperature_resolution);
-    }
-    else if (CMND_HUMIDITY_RESOLUTION == command_code) {
-      if ((payload >= 0) && (payload <= 3)) {
-        Settings.flag2.humidity_resolution = payload;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE, command, Settings.flag2.humidity_resolution);
-    }
-    else if (CMND_PRESSURE_RESOLUTION == command_code) {
-      if ((payload >= 0) && (payload <= 3)) {
-        Settings.flag2.pressure_resolution = payload;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE, command, Settings.flag2.pressure_resolution);
-    }
-    else if (CMND_POWER_RESOLUTION == command_code) {
-      if ((payload >= 0) && (payload <= 3)) {
-        Settings.flag2.wattage_resolution = payload;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE, command, Settings.flag2.wattage_resolution);
-    }
-    else if (CMND_VOLTAGE_RESOLUTION == command_code) {
-      if ((payload >= 0) && (payload <= 3)) {
-        Settings.flag2.voltage_resolution = payload;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE, command, Settings.flag2.voltage_resolution);
-    }
-    else if (CMND_CURRENT_RESOLUTION == command_code) {
-      if ((payload >= 0) && (payload <= 3)) {
-        Settings.flag2.current_resolution = payload;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE, command, Settings.flag2.current_resolution);
-    }
-    else if (CMND_ENERGY_RESOLUTION == command_code) {
-      if ((payload >= 0) && (payload <= 5)) {
-        Settings.flag2.energy_resolution = payload;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE, command, Settings.flag2.energy_resolution);
-    }
-    else if (CMND_MODULE == command_code) {
-      if ((payload > 0) && (payload <= MAXMODULE)) {
-        payload--;
-        Settings.last_module = Settings.module;
-        Settings.module = payload;
-        if (Settings.last_module != payload) {
-          for (byte i = 0; i < MAX_GPIO_PIN; i++) {
-            Settings.my_gp.io[i] = 0;
-          }
-        }
-        restart_flag = 2;
-      }
-      snprintf_P(stemp1, sizeof(stemp1), kModules[Settings.module].name);
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE_SVALUE, command, Settings.module +1, stemp1);
-    }
-    else if (CMND_MODULES == command_code) {
-      for (byte i = 0; i < MAXMODULE; i++) {
-        if (!jsflg) {
-          snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_MODULES "%d\":["), lines);
-        } else {
-          snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s,"), mqtt_data);
-        }
-        jsflg = 1;
-        snprintf_P(stemp1, sizeof(stemp1), kModules[i].name);
-        snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s\"%d (%s)\""), mqtt_data, i +1, stemp1);
-        if ((strlen(mqtt_data) > (LOGSZ - TOPSZ)) || (i == MAXMODULE -1)) {
-          snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s]}"), mqtt_data);
-          MqttPublishPrefixTopic_P(RESULT_OR_STAT, type);
-          jsflg = 0;
-          lines++;
-        }
-      }
-      mqtt_data[0] = '\0';
-    }
-    else if ((CMND_GPIO == command_code) && (index < MAX_GPIO_PIN)) {
-      mytmplt cmodule;
-      memcpy_P(&cmodule, &kModules[Settings.module], sizeof(cmodule));
-      if ((GPIO_USER == cmodule.gp.io[index]) && (payload >= 0) && (payload < GPIO_SENSOR_END)) {
-        for (byte i = 0; i < MAX_GPIO_PIN; i++) {
-          if ((GPIO_USER == cmodule.gp.io[i]) && (Settings.my_gp.io[i] == payload)) {
-            Settings.my_gp.io[i] = 0;
-          }
-        }
-        Settings.my_gp.io[index] = payload;
-        restart_flag = 2;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{"));
-      byte jsflg = 0;
-      for (byte i = 0; i < MAX_GPIO_PIN; i++) {
-        if (GPIO_USER == cmodule.gp.io[i]) {
-          if (jsflg) {
-            snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s,"), mqtt_data);
-          }
-          jsflg = 1;
-          snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s\"" D_CMND_GPIO "%d\":\"%d (%s)\""),
-            mqtt_data, i, Settings.my_gp.io[i], GetTextIndexed(stemp1, sizeof(stemp1), Settings.my_gp.io[i], kSensorNames));
-        }
-      }
-      if (jsflg) {
-        snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s}"), mqtt_data);
-      } else {
-        snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_SVALUE, command, D_JSON_NOT_SUPPORTED);
-      }
-    }
-    else if (CMND_GPIOS == command_code) {
-      for (byte i = 0; i < GPIO_SENSOR_END; i++) {
-        if (!jsflg) {
-          snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_GPIOS "%d\":["), lines);
-        } else {
-          snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s,"), mqtt_data);
-        }
-        jsflg = 1;
-        snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s\"%d (%s)\""), mqtt_data, i, GetTextIndexed(stemp1, sizeof(stemp1), i, kSensorNames));
-        if ((strlen(mqtt_data) > (LOGSZ - TOPSZ)) || (i == GPIO_SENSOR_END -1)) {
-          snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s]}"), mqtt_data);
-          MqttPublishPrefixTopic_P(RESULT_OR_STAT, type);
-          jsflg = 0;
-          lines++;
-        }
-      }
-      mqtt_data[0] = '\0';
-    }
-    else if ((CMND_PWM == command_code) && pwm_present && (index > 0) && (index <= MAX_PWMS)) {
-      if ((payload >= 0) && (payload <= Settings.pwm_range) && (pin[GPIO_PWM1 + index -1] < 99)) {
-        Settings.pwm_value[index -1] = payload;
-        analogWrite(pin[GPIO_PWM1 + index -1], bitRead(pwm_inverted, index -1) ? Settings.pwm_range - payload : payload);
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_PWM "\":{"));
-      bool first = true;
-      for (byte i = 0; i < MAX_PWMS; i++) {
-        if(pin[GPIO_PWM1 + i] < 99) {
-          snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s%s\"" D_CMND_PWM "%d\":%d"), mqtt_data, first ? "" : ",", i+1, Settings.pwm_value[i]);
-          first = false;
-        }
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s}}"),mqtt_data);
-    }
-    else if (CMND_PWMFREQUENCY == command_code) {
-      if ((1 == payload) || ((payload >= 100) && (payload <= 4000))) {
-        Settings.pwm_frequency = (1 == payload) ? PWM_FREQ : payload;
-        analogWriteFreq(Settings.pwm_frequency);   // Default is 1000 (core_esp8266_wiring_pwm.c)
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE, command, Settings.pwm_frequency);
-    }
-    else if (CMND_PWMRANGE == command_code) {
-      if ((1 == payload) || ((payload > 254) && (payload < 1024))) {
-        Settings.pwm_range = (1 == payload) ? PWM_RANGE : payload;
-        for (byte i = 0; i < MAX_PWMS; i++) {
-          if (Settings.pwm_value[i] > Settings.pwm_range) {
-            Settings.pwm_value[i] = Settings.pwm_range;
-          }
-        }
-        analogWriteRange(Settings.pwm_range);      // Default is 1023 (Arduino.h)
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE, command, Settings.pwm_range);
-    }
-    else if ((CMND_COUNTER == command_code) && (index > 0) && (index <= MAX_COUNTERS)) {
-      if ((data_len > 0) && (pin[GPIO_CNTR1 + index -1] < 99)) {
-        RtcSettings.pulse_counter[index -1] = payload16;
-        Settings.pulse_counter[index -1] = payload16;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_INDEX_LVALUE, command, index, RtcSettings.pulse_counter[index -1]);
-    }
-    else if ((CMND_COUNTERTYPE == command_code) && (index > 0) && (index <= MAX_COUNTERS)) {
-      if ((payload >= 0) && (payload <= 1) && (pin[GPIO_CNTR1 + index -1] < 99)) {
-        bitWrite(Settings.pulse_counter_type, index -1, payload &1);
-        RtcSettings.pulse_counter[index -1] = 0;
-        Settings.pulse_counter[index -1] = 0;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_INDEX_NVALUE, command, index, bitRead(Settings.pulse_counter_type, index -1));
-    }
-    else if (CMND_COUNTERDEBOUNCE == command_code) {
-      if ((data_len > 0) && (payload16 < 32001)) {
-        Settings.pulse_counter_debounce = payload16;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE, command, Settings.pulse_counter_debounce);
-    }
-    else if (CMND_SLEEP == command_code) {
-      if ((payload >= 0) && (payload < 251)) {
-        if ((!Settings.sleep && payload) || (Settings.sleep && !payload)) {
-          restart_flag = 2;
-        }
-        Settings.sleep = payload;
-        sleep = payload;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE_UNIT_NVALUE_UNIT, command, sleep, (Settings.flag.value_units) ? " " D_UNIT_MILLISECOND : "", Settings.sleep, (Settings.flag.value_units) ? " " D_UNIT_MILLISECOND : "");
-    }
-    else if ((CMND_UPGRADE == command_code) || (CMND_UPLOAD == command_code)) {
-      // Check if the payload is numerically 1, and had no trailing chars.
-      //   e.g. "1foo" or "1.2.3" could fool us.
-      // Check if the version we have been asked to upgrade to is higher than our current version.
-      //   We also need at least 3 chars to make a valid version number string.
-      if (((1 == data_len) && (1 == payload)) || ((data_len >= 3) && NewerVersion(dataBuf))) {
-        ota_state_flag = 3;
-//        snprintf_P(mqtt_data, sizeof(mqtt_data), "{\"%s\":\"" D_JSON_VERSION " %s " D_JSON_FROM " %s\"}", command, my_version, Settings.ota_url);
-        snprintf_P(mqtt_data, sizeof(mqtt_data), "{\"%s\":\"" D_JSON_VERSION " %s " D_JSON_FROM " %s\"}", command, my_version, GetOtaUrl(stemp1, sizeof(stemp1)));
-      } else {
-        snprintf_P(mqtt_data, sizeof(mqtt_data), "{\"%s\":\"" D_JSON_ONE_OR_GT "\"}", command, my_version);
-      }
-    }
-    else if (CMND_OTAURL == command_code) {
-      if ((data_len > 0) && (data_len < sizeof(Settings.ota_url)))
-        strlcpy(Settings.ota_url, (1 == payload) ? OTA_URL : dataBuf, sizeof(Settings.ota_url));
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_SVALUE, command, Settings.ota_url);
-    }
-    else if (CMND_SERIALLOG == command_code) {
-      if ((payload >= LOG_LEVEL_NONE) && (payload <= LOG_LEVEL_ALL)) {
-        Settings.seriallog_level = payload;
-        seriallog_level = payload;
-        seriallog_timer = 0;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE_ACTIVE_NVALUE, command, Settings.seriallog_level, seriallog_level);
-    }
-    else if (CMND_SYSLOG == command_code) {
-      if ((payload >= LOG_LEVEL_NONE) && (payload <= LOG_LEVEL_ALL)) {
-        Settings.syslog_level = payload;
-        syslog_level = (Settings.flag2.emulation) ? 0 : payload;
-        syslog_timer = 0;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE_ACTIVE_NVALUE, command, Settings.syslog_level, syslog_level);
-    }
-    else if (CMND_LOGHOST == command_code) {
-      if ((data_len > 0) && (data_len < sizeof(Settings.syslog_host))) {
-        strlcpy(Settings.syslog_host, (1 == payload) ? SYS_LOG_HOST : dataBuf, sizeof(Settings.syslog_host));
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_SVALUE, command, Settings.syslog_host);
-    }
-    else if (CMND_LOGPORT == command_code) {
-      if (payload16 > 0) {
-        Settings.syslog_port = (1 == payload16) ? SYS_LOG_PORT : payload16;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE, command, Settings.syslog_port);
-    }
-    else if ((CMND_IPADDRESS == command_code) && (index > 0) && (index <= 4)) {
-      if (ParseIp(&address, dataBuf)) {
-        Settings.ip_address[index -1] = address;
-//        restart_flag = 2;
-      }
-      snprintf_P(stemp1, sizeof(stemp1), PSTR(" (%s)"), WiFi.localIP().toString().c_str());
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_INDEX_SVALUE_SVALUE, command, index, IPAddress(Settings.ip_address[index -1]).toString().c_str(), (1 == index) ? stemp1:"");
-    }
-    else if ((CMND_NTPSERVER == command_code) && (index > 0) && (index <= 3)) {
-      if ((data_len > 0) && (data_len < sizeof(Settings.ntp_server[0]))) {
-        strlcpy(Settings.ntp_server[index -1], (!strcmp(dataBuf,"0")) ? "" : (1 == payload) ? (1==index)?NTP_SERVER1:(2==index)?NTP_SERVER2:NTP_SERVER3 : dataBuf, sizeof(Settings.ntp_server[0]));
-        for (i = 0; i < strlen(Settings.ntp_server[index -1]); i++) {
-          if (Settings.ntp_server[index -1][i] == ',') {
-            Settings.ntp_server[index -1][i] = '.';
-          }
-        }
-        restart_flag = 2;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_INDEX_SVALUE, command, index, Settings.ntp_server[index -1]);
-    }
-    else if (CMND_AP == command_code) {
-      if ((payload >= 0) && (payload <= 2)) {
-        switch (payload) {
-        case 0:  // Toggle
-          Settings.sta_active ^= 1;
-          break;
-        case 1:  // AP1
-        case 2:  // AP2
-          Settings.sta_active = payload -1;
-        }
-        restart_flag = 2;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE_SVALUE, command, Settings.sta_active +1, Settings.sta_ssid[Settings.sta_active]);
-    }
-    else if ((CMND_SSID == command_code) && (index > 0) && (index <= 2)) {
-      if ((data_len > 0) && (data_len < sizeof(Settings.sta_ssid[0]))) {
-        strlcpy(Settings.sta_ssid[index -1], (1 == payload) ? (1 == index) ? STA_SSID1 : STA_SSID2 : dataBuf, sizeof(Settings.sta_ssid[0]));
-        Settings.sta_active = index -1;
-        restart_flag = 2;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_INDEX_SVALUE, command, index, Settings.sta_ssid[index -1]);
-    }
-    else if ((CMND_PASSWORD == command_code) && (index > 0) && (index <= 2)) {
-      if ((data_len > 0) && (data_len < sizeof(Settings.sta_pwd[0]))) {
-        strlcpy(Settings.sta_pwd[index -1], (1 == payload) ? (1 == index) ? STA_PASS1 : STA_PASS2 : dataBuf, sizeof(Settings.sta_pwd[0]));
-        Settings.sta_active = index -1;
-        restart_flag = 2;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_INDEX_SVALUE, command, index, Settings.sta_pwd[index -1]);
-    }
-    else if ((CMND_HOSTNAME == command_code) && !grpflg) {
-      if ((data_len > 0) && (data_len < sizeof(Settings.hostname))) {
-        strlcpy(Settings.hostname, (1 == payload) ? WIFI_HOSTNAME : dataBuf, sizeof(Settings.hostname));
-        if (strstr(Settings.hostname,"%")) {
-          strlcpy(Settings.hostname, WIFI_HOSTNAME, sizeof(Settings.hostname));
-        }
-        restart_flag = 2;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_SVALUE, command, Settings.hostname);
-    }
-    else if (CMND_WIFICONFIG == command_code) {
-      if ((payload >= WIFI_RESTART) && (payload < MAX_WIFI_OPTION)) {
-        Settings.sta_config = payload;
-        wifi_state_flag = Settings.sta_config;
-        snprintf_P(stemp1, sizeof(stemp1), kWifiConfig[Settings.sta_config]);
-        snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_WIFICONFIG "\":\"%s " D_JSON_SELECTED "\"}"), stemp1);
-        if (WifiState() != WIFI_RESTART) {
-//          snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s after restart"), mqtt_data);
-          restart_flag = 2;
-        }
-      } else {
-        snprintf_P(stemp1, sizeof(stemp1), kWifiConfig[Settings.sta_config]);
-        snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE_SVALUE, command, Settings.sta_config, stemp1);
-      }
-    }
-    else if ((CMND_FRIENDLYNAME == command_code) && (index > 0) && (index <= 4)) {
-      if ((data_len > 0) && (data_len < sizeof(Settings.friendlyname[0]))) {
-        if (1 == index) {
-          snprintf_P(stemp1, sizeof(stemp1), PSTR(FRIENDLY_NAME));
-        } else {
-          snprintf_P(stemp1, sizeof(stemp1), PSTR(FRIENDLY_NAME "%d"), index);
-        }
-        strlcpy(Settings.friendlyname[index -1], (1 == payload) ? stemp1 : dataBuf, sizeof(Settings.friendlyname[index -1]));
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_INDEX_SVALUE, command, index, Settings.friendlyname[index -1]);
-    }
-    else if ((CMND_SWITCHMODE == command_code) && (index > 0) && (index <= MAX_SWITCHES)) {
-      if ((payload >= 0) && (payload < MAX_SWITCH_OPTION)) {
-        Settings.switchmode[index -1] = payload;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_INDEX_NVALUE, command, index, Settings.switchmode[index-1]);
-    }
-#ifdef USE_WEBSERVER
-    else if (CMND_WEBSERVER == command_code) {
-      if ((payload >= 0) && (payload <= 2)) {
-        Settings.webserver = payload;
-      }
-      if (Settings.webserver) {
-        snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_WEBSERVER "\":\"" D_JSON_ACTIVE_FOR " %s " D_JSON_ON_DEVICE " %s " D_JSON_WITH_IP_ADDRESS " %s\"}"),
-          (2 == Settings.webserver) ? D_ADMIN : D_USER, my_hostname, WiFi.localIP().toString().c_str());
-      } else {
-        snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_SVALUE, command, GetStateText(0));
-      }
-    }
-    else if (CMND_WEBPASSWORD == command_code) {
-      if ((data_len > 0) && (data_len < sizeof(Settings.web_password))) {
-        strlcpy(Settings.web_password, (!strcmp(dataBuf,"0")) ? "" : (1 == payload) ? WEB_PASSWORD : dataBuf, sizeof(Settings.web_password));
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_SVALUE, command, Settings.web_password);
-    }
-    else if (CMND_WEBLOG == command_code) {
-      if ((payload >= LOG_LEVEL_NONE) && (payload <= LOG_LEVEL_ALL)) {
-        Settings.weblog_level = payload;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE, command, Settings.weblog_level);
-    }
-#ifdef USE_EMULATION
-    else if (CMND_EMULATION == command_code) {
-      if ((payload >= EMUL_NONE) && (payload < EMUL_MAX)) {
-        Settings.flag2.emulation = payload;
-        restart_flag = 2;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE, command, Settings.flag2.emulation);
-    }
-#endif  // USE_EMULATION
-#endif  // USE_WEBSERVER
-    else if (CMND_TELEPERIOD == command_code) {
-      if ((payload >= 0) && (payload < 3601)) {
-        Settings.tele_period = (1 == payload) ? TELE_PERIOD : payload;
-        if ((Settings.tele_period > 0) && (Settings.tele_period < 10)) {
-          Settings.tele_period = 10;   // Do not allow periods < 10 seconds
-        }
-        tele_period = Settings.tele_period;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE_UNIT, command, Settings.tele_period, (Settings.flag.value_units) ? " " D_UNIT_SECOND : "");
-    }
-    else if (CMND_RESTART == command_code) {
-      switch (payload) {
-      case 1:
-        restart_flag = 2;
-        snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_SVALUE, command, D_JSON_RESTARTING);
-        break;
-      case 99:
-        AddLog_P(LOG_LEVEL_INFO, PSTR(D_LOG_APPLICATION D_RESTARTING));
-        ESP.restart();
-        break;
-      default:
-        snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_SVALUE, command, D_JSON_ONE_TO_RESTART);
-      }
-    }
-    else if (CMND_RESET == command_code) {
-      switch (payload) {
-      case 1:
-        restart_flag = 211;
-        snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_SVALUE, command , D_JSON_RESET_AND_RESTARTING);
-        break;
-      case 2:
-      case 3:
-        restart_flag = 210 + payload;
-        snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_RESET "\":\"" D_JSON_ERASE ", " D_JSON_RESET_AND_RESTARTING "\"}"));
-        break;
-      default:
-        snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_SVALUE, command, D_JSON_ONE_TO_RESET);
-      }
-    }
-    else if (CMND_TIMEZONE == command_code) {
-      if ((data_len > 0) && (((payload >= -13) && (payload <= 13)) || (99 == payload))) {
-        Settings.timezone = payload;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE, command, Settings.timezone);
-    }
-    else if (CMND_ALTITUDE == command_code) {
-      if ((data_len > 0) && ((payload >= -30000) && (payload <= 30000))) {
-        Settings.altitude = payload;
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE, command, Settings.altitude);
-    }
-    else if (CMND_LEDPOWER == command_code) {
-      if ((payload >= 0) && (payload <= 2)) {
-        Settings.ledstate &= 8;
-        switch (payload) {
-        case 0: // Off
-        case 1: // On
-          Settings.ledstate = payload << 3;
-          break;
-        case 2: // Toggle
-          Settings.ledstate ^= 8;
-          break;
-        }
-        blinks = 0;
-        SetLedPower(Settings.ledstate &8);
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_SVALUE, command, GetStateText(bitRead(Settings.ledstate, 3)));
-    }
-    else if (CMND_LEDSTATE ==command_code) {
-      if ((payload >= 0) && (payload < MAX_LED_OPTION)) {
-        Settings.ledstate = payload;
-        if (!Settings.ledstate) {
-          SetLedPower(0);
-        }
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_NVALUE, command, Settings.ledstate);
-    }
-    else if (CMND_CFGDUMP == command_code) {
-      SettingsDump(dataBuf);
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_SVALUE, command, D_JSON_DONE);
-    }
-#ifdef USE_I2C
-    else if ((CMND_I2CSCAN == command_code) && i2c_flg) {
-      I2cScan(mqtt_data, sizeof(mqtt_data));
-    }
-#endif  // USE_I2C
-//    else if (Settings.flag.mqtt_enabled && MqttCommand(grpflg, type, index, dataBuf, data_len, payload, payload16)) {
-      // Serviced
-//    }
-    else if (XdrvCommand(grpflg, type, index, dataBuf, data_len, payload, payload16)) {
-      // Serviced
-    }
-#ifdef DEBUG_THEO
-    else if (CMND_EXCEPTION == command_code) {
-      if (data_len > 0) {
-        ExceptionTest(payload);
-      }
-      snprintf_P(mqtt_data, sizeof(mqtt_data), S_JSON_COMMAND_SVALUE, command, D_JSON_DONE);
-    }
-#endif  // DEBUG_THEO
-    else {
-      type = NULL;
+void SetLedPower(uint32_t state)
+{
+  if (99 == pin[GPIO_LEDLNK]) {           // Legacy - Only use LED1 and/or LED2
+    SetLedPowerIdx(0, state);
+  } else {
+    power_t mask = 1;
+    for (uint32_t i = 0; i < leds_present; i++) {  // Map leds to power
+      bool tstate = (power & mask);
+      SetLedPowerIdx(i, tstate);
+      mask <<= 1;
     }
   }
-  if (type == NULL) {
-    blinks = 201;
-    snprintf_P(topicBuf, sizeof(topicBuf), PSTR(D_JSON_COMMAND));
-    snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_JSON_COMMAND "\":\"" D_JSON_UNKNOWN "\"}"));
-    type = (char*)topicBuf;
+}
+
+void SetLedPowerAll(uint32_t state)
+{
+  for (uint32_t i = 0; i < leds_present; i++) {
+    SetLedPowerIdx(i, state);
   }
-  if (mqtt_data[0] != '\0') {
-    MqttPublishPrefixTopic_P(RESULT_OR_STAT, type);
+}
+
+void SetLedLink(uint32_t state)
+{
+  uint32_t led_pin = pin[GPIO_LEDLNK];
+  uint32_t led_inv = ledlnk_inverted;
+  if (99 == led_pin) {                    // Legacy - LED1 is status
+    led_pin = pin[GPIO_LED1];
+    led_inv = bitRead(led_inverted, 0);
   }
-  fallback_topic_flag = 0;
+  if (led_pin < 99) {
+    if (state) { state = 1; }
+    digitalWrite(led_pin, (led_inv) ? !state : state);
+  }
+}
+
+void SetPulseTimer(uint32_t index, uint32_t time)
+{
+  pulse_timer[index] = (time > 111) ? millis() + (1000 * (time - 100)) : (time > 0) ? millis() + (100 * time) : 0L;
+}
+
+uint32_t GetPulseTimer(uint32_t index)
+{
+  long time = TimePassedSince(pulse_timer[index]);
+  if (time < 0) {
+    time *= -1;
+    return (time > 11100) ? (time / 1000) + 100 : (time > 0) ? time / 100 : 0;
+  }
+  return 0;
 }
 
 /********************************************************************************************/
 
-boolean send_button_power(byte key, byte device, byte state)
+bool SendKey(uint32_t key, uint32_t device, uint32_t state)
 {
-// key 0 = button_topic
-// key 1 = switch_topic
-// state 0 = off
-// state 1 = on
-// state 2 = toggle
-// state 3 = hold
-// state 9 = clear retain flag
+// key 0 = KEY_BUTTON = button_topic
+// key 1 = KEY_SWITCH = switch_topic
+// state 0 = POWER_OFF = off
+// state 1 = POWER_ON = on
+// state 2 = POWER_TOGGLE = toggle
+// state 3 = POWER_HOLD = hold
+// state 9 = CLEAR_RETAIN = clear retain flag
 
   char stopic[TOPSZ];
   char scommand[CMDSZ];
-  boolean result = false;
+  char key_topic[sizeof(Settings.button_topic)];
+  bool result = false;
 
-  char *key_topic = (key) ? Settings.switch_topic : Settings.button_topic;
+  char *tmp = (key) ? Settings.switch_topic : Settings.button_topic;
+  Format(key_topic, tmp, sizeof(key_topic));
   if (Settings.flag.mqtt_enabled && MqttIsConnected() && (strlen(key_topic) != 0) && strcmp(key_topic, "0")) {
     if (!key && (device > devices_present)) {
-      device = 1;
+      device = 1;                  // Only allow number of buttons up to number of devices
     }
-    GetTopic_P(stopic, CMND, key_topic, GetPowerDevice(scommand, device, sizeof(scommand), key));
-    if (9 == state) {
+    GetTopic_P(stopic, CMND, key_topic,
+               GetPowerDevice(scommand, device, sizeof(scommand), (key + Settings.flag.device_index_enable)));  // cmnd/switchtopic/POWERx
+    if (CLEAR_RETAIN == state) {
       mqtt_data[0] = '\0';
     } else {
-      if ((!strcmp(mqtt_topic, key_topic) || !strcmp(Settings.mqtt_grptopic, key_topic)) && (2 == state)) {
-        state = ~(power >> (device -1)) &1;
+      if ((Settings.flag3.button_switch_force_local || !strcmp(mqtt_topic, key_topic) || !strcmp(Settings.mqtt_grptopic, key_topic)) && (POWER_TOGGLE == state)) {
+        state = ~(power >> (device -1)) &1;  // POWER_OFF or POWER_ON
       }
       snprintf_P(mqtt_data, sizeof(mqtt_data), GetStateText(state));
     }
 #ifdef USE_DOMOTICZ
-    if (!(DomoticzButton(key, device, state, strlen(mqtt_data)))) {
-      MqttPublishDirect(stopic, (key) ? Settings.flag.mqtt_switch_retain : Settings.flag.mqtt_button_retain);
+    if (!(DomoticzSendKey(key, device, state, strlen(mqtt_data)))) {
+      MqttPublishDirect(stopic, ((key) ? Settings.flag.mqtt_switch_retain : Settings.flag.mqtt_button_retain) && (state != POWER_HOLD || !Settings.flag3.no_hold_retain));
     }
 #else
-    MqttPublishDirect(stopic, (key) ? Settings.flag.mqtt_switch_retain : Settings.flag.mqtt_button_retain);
+    MqttPublishDirect(stopic, ((key) ? Settings.flag.mqtt_switch_retain : Settings.flag.mqtt_button_retain) && (state != POWER_HOLD || !Settings.flag3.no_hold_retain));
 #endif  // USE_DOMOTICZ
-    result = true;
+    result = !Settings.flag3.button_switch_force_local;
+  } else {
+    Response_P(PSTR("{\"%s%d\":{\"State\":%d}}"), (key) ? "Switch" : "Button", device, state);
+    result = XdrvRulesProcess();
   }
+#ifdef USE_KNX
+  KnxSendButtonPower(key, device, state);
+#endif  // USE_KNX
   return result;
 }
 
-void ExecuteCommandPower(byte device, byte state)
+void ExecuteCommandPower(uint32_t device, uint32_t state, uint32_t source)
 {
 // device  = Relay number 1 and up
-// state 0 = Relay Off
-// state 1 = Relay On (turn off after Settings.pulse_timer * 100 mSec if enabled)
-// state 2 = Toggle relay
-// state 3 = Blink relay
-// state 4 = Stop blinking relay
-// state 6 = Relay Off and no publishPowerState
-// state 7 = Relay On and no publishPowerState
-// state 9 = Show power state
+// state 0 = POWER_OFF = Relay Off
+// state 1 = POWER_ON = Relay On (turn off after Settings.pulse_timer * 100 mSec if enabled)
+// state 2 = POWER_TOGGLE = Toggle relay
+// state 3 = POWER_BLINK = Blink relay
+// state 4 = POWER_BLINK_STOP = Stop blinking relay
+// state 8 = POWER_OFF_NO_STATE = Relay Off and no publishPowerState
+// state 9 = POWER_ON_NO_STATE = Relay On and no publishPowerState
+// state 10 = POWER_TOGGLE_NO_STATE = Toggle relay and no publishPowerState
+// state 16 = POWER_SHOW_STATE = Show power state
 
-  uint8_t publish_power = 1;
-  if ((POWER_OFF_NO_STATE == state) || (POWER_ON_NO_STATE == state)) {
-    state &= 1;
-    publish_power = 0;
+//  ShowSource(source);
+
+#ifdef USE_SONOFF_IFAN
+  if (IsModuleIfan()) {
+    blink_mask &= 1;                 // No blinking on the fan relays
+    Settings.flag.interlock = 0;     // No interlock mode as it is already done by the microcontroller
+    Settings.pulse_timer[1] = 0;     // No pulsetimers on the fan relays
+    Settings.pulse_timer[2] = 0;
+    Settings.pulse_timer[3] = 0;
   }
+#endif  // USE_SONOFF_IFAN
+
+  bool publish_power = true;
+  if ((state >= POWER_OFF_NO_STATE) && (state <= POWER_TOGGLE_NO_STATE)) {
+    state &= 3;                      // POWER_OFF, POWER_ON or POWER_TOGGLE
+    publish_power = false;
+  }
+
   if ((device < 1) || (device > devices_present)) {
     device = 1;
   }
+  active_device = device;
+
   if (device <= MAX_PULSETIMERS) {
-    pulse_timer[(device -1)] = 0;
+    SetPulseTimer(device -1, 0);
   }
-  power_t mask = 1 << (device -1);
+  power_t mask = 1 << (device -1);        // Device to control
   if (state <= POWER_TOGGLE) {
     if ((blink_mask & mask)) {
       blink_mask &= (POWER_MASK ^ mask);  // Clear device mask
       MqttPublishPowerBlinkState(device);
     }
-    if (Settings.flag.interlock && !interlock_mutex) {  // Clear all but masked relay
-      interlock_mutex = 1;
-      for (byte i = 0; i < devices_present; i++) {
-        power_t imask = 1 << i;
-        if ((power & imask) && (mask != imask)) {
-          ExecuteCommandPower(i +1, POWER_OFF);
+
+    if (Settings.flag.interlock &&
+        !interlock_mutex &&
+        ((POWER_ON == state) || ((POWER_TOGGLE == state) && !(power & mask)))
+       ) {
+      interlock_mutex = true;                           // Clear all but masked relay in interlock group if new set requested
+      for (uint32_t i = 0; i < MAX_INTERLOCKS; i++) {
+        if (Settings.interlock[i] & mask) {             // Find interlock group
+          for (uint32_t j = 0; j < devices_present; j++) {
+            power_t imask = 1 << j;
+            if ((Settings.interlock[i] & imask) && (power & imask) && (mask != imask)) {
+              ExecuteCommandPower(j +1, POWER_OFF, SRC_IGNORE);
+              delay(50);                                // Add some delay to make sure never have more than one relay on
+            }
+          }
+          break;                                        // An interlocked relay is only present in one group so quit
         }
       }
-      interlock_mutex = 0;
+      interlock_mutex = false;
     }
+
     switch (state) {
     case POWER_OFF: {
       power &= (POWER_MASK ^ mask);
@@ -1205,13 +614,18 @@ void ExecuteCommandPower(byte device, byte state)
     case POWER_TOGGLE:
       power ^= mask;
     }
-    SetDevicePower(power);
+    SetDevicePower(power, source);
 #ifdef USE_DOMOTICZ
     DomoticzUpdatePowerState(device);
 #endif  // USE_DOMOTICZ
-    if (device <= MAX_PULSETIMERS) {
-//      pulse_timer[(device -1)] = (power & mask) ? Settings.pulse_timer[(device -1)] : 0;
-      pulse_timer[(device -1)] = (((POWER_ALL_OFF_PULSETIME_ON == Settings.poweronstate) ? ~power : power) & mask) ? Settings.pulse_timer[(device -1)] : 0;
+#ifdef USE_KNX
+    KnxUpdatePowerState(device, power);
+#endif  // USE_KNX
+    if (publish_power && Settings.flag3.hass_tele_on_power) {
+      MqttPublishTeleState();
+    }
+    if (device <= MAX_PULSETIMERS) {  // Restart PulseTime if powered On
+      SetPulseTimer(device -1, (((POWER_ALL_OFF_PULSETIME_ON == Settings.poweronstate) ? ~power : power) & mask) ? Settings.pulse_timer[device -1] : 0);
     }
   }
   else if (POWER_BLINK == state) {
@@ -1219,18 +633,18 @@ void ExecuteCommandPower(byte device, byte state)
       blink_powersave = (blink_powersave & (POWER_MASK ^ mask)) | (power & mask);  // Save state
       blink_power = (power >> (device -1))&1;  // Prep to Toggle
     }
-    blink_timer = 1;
+    blink_timer = millis() + 100;
     blink_counter = ((!Settings.blinkcount) ? 64000 : (Settings.blinkcount *2)) +1;
     blink_mask |= mask;  // Set device mask
     MqttPublishPowerBlinkState(device);
     return;
   }
   else if (POWER_BLINK_STOP == state) {
-    byte flag = (blink_mask & mask);
+    bool flag = (blink_mask & mask);
     blink_mask &= (POWER_MASK ^ mask);  // Clear device mask
     MqttPublishPowerBlinkState(device);
     if (flag) {
-      ExecuteCommandPower(device, (blink_powersave >> (device -1))&1);  // Restore state
+      ExecuteCommandPower(device, (blink_powersave >> (device -1))&1, SRC_IGNORE);  // Restore state
     }
     return;
   }
@@ -1239,193 +653,135 @@ void ExecuteCommandPower(byte device, byte state)
   }
 }
 
-void StopAllPowerBlink()
+void StopAllPowerBlink(void)
 {
   power_t mask;
 
-  for (byte i = 1; i <= devices_present; i++) {
+  for (uint32_t i = 1; i <= devices_present; i++) {
     mask = 1 << (i -1);
     if (blink_mask & mask) {
       blink_mask &= (POWER_MASK ^ mask);  // Clear device mask
       MqttPublishPowerBlinkState(i);
-      ExecuteCommandPower(i, (blink_powersave >> (i -1))&1);  // Restore state
+      ExecuteCommandPower(i, (blink_powersave >> (i -1))&1, SRC_IGNORE);  // Restore state
     }
   }
 }
 
-void ExecuteCommand(char *cmnd)
+void MqttShowPWMState(void)
 {
-  char stopic[CMDSZ];
-  char svalue[INPUT_BUFFER_SIZE];
-  char *start;
-  char *token;
-
-  token = strtok(cmnd, " ");
-  if (token != NULL) {
-    start = strrchr(token, '/');   // Skip possible cmnd/sonoff/ preamble
-    if (start) {
-      token = start +1;
+  ResponseAppend_P(PSTR("\"" D_CMND_PWM "\":{"));
+  bool first = true;
+  for (uint32_t i = 0; i < MAX_PWMS; i++) {
+    if (pin[GPIO_PWM1 + i] < 99) {
+      ResponseAppend_P(PSTR("%s\"" D_CMND_PWM "%d\":%d"), first ? "" : ",", i+1, Settings.pwm_value[i]);
+      first = false;
     }
   }
-  snprintf_P(stopic, sizeof(stopic), PSTR("/%s"), (token == NULL) ? "" : token);
-  token = strtok(NULL, "");
-//  snprintf_P(svalue, sizeof(svalue), (token == NULL) ? "" : token);  // Fails with command FullTopic home/%prefix%/%topic% as it processes %p of %prefix%
-  strlcpy(svalue, (token == NULL) ? "" : token, sizeof(svalue));       // Fixed 5.8.0b
-  MqttDataHandler(stopic, (byte*)svalue, strlen(svalue));
+  ResponseJsonEnd();
 }
 
-void PublishStatus(uint8_t payload)
-{
-  uint8_t option = 1;
-
-  // Workaround MQTT - TCP/IP stack queueing when SUB_PREFIX = PUB_PREFIX
-  if (!strcmp(Settings.mqtt_prefix[0],Settings.mqtt_prefix[1]) && (!payload)) {
-    option++;
-  }
-
-  if ((!Settings.flag.mqtt_enabled) && (6 == payload)) {
-    payload = 99;
-  }
-  if (!energy_flg && (9 == payload)) {
-    payload = 99;
-  }
-
-  if ((0 == payload) || (99 == payload)) {
-    snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_STATUS "\":{\"" D_CMND_MODULE "\":%d,\"" D_CMND_FRIENDLYNAME "\":\"%s\",\"" D_CMND_TOPIC "\":\"%s\",\"" D_CMND_BUTTONTOPIC "\":\"%s\",\"" D_CMND_POWER "\":%d,\"" D_CMND_POWERONSTATE "\":%d,\"" D_CMND_LEDSTATE "\":%d,\"" D_CMND_SAVEDATA "\":%d,\"" D_JSON_SAVESTATE "\":%d,\"" D_CMND_BUTTONRETAIN "\":%d,\"" D_CMND_POWERRETAIN "\":%d}}"),
-      Settings.module +1, Settings.friendlyname[0], mqtt_topic, Settings.button_topic, power, Settings.poweronstate, Settings.ledstate, Settings.save_data, Settings.flag.save_state, Settings.flag.mqtt_button_retain, Settings.flag.mqtt_power_retain);
-    MqttPublishPrefixTopic_P(option, PSTR(D_CMND_STATUS));
-  }
-
-  if ((0 == payload) || (1 == payload)) {
-    snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_STATUS D_STATUS1_PARAMETER "\":{\"" D_JSON_BAUDRATE "\":%d,\"" D_CMND_GROUPTOPIC "\":\"%s\",\"" D_CMND_OTAURL "\":\"%s\",\"" D_JSON_UPTIME "\":\"%s\",\"" D_JSON_STARTUPUTC "\":\"%s\",\"" D_CMND_SLEEP "\":%d,\"" D_JSON_BOOTCOUNT "\":%d,\"" D_JSON_SAVECOUNT "\":%d,\"" D_JSON_SAVEADDRESS "\":\"%X\"}}"),
-      baudrate, Settings.mqtt_grptopic, Settings.ota_url, GetDateAndTime(DT_UPTIME).c_str(), GetDateAndTime(DT_RESTART).c_str(), Settings.sleep, Settings.bootcount, Settings.save_flag, GetSettingsAddress());
-    MqttPublishPrefixTopic_P(option, PSTR(D_CMND_STATUS "1"));
-  }
-
-  if ((0 == payload) || (2 == payload)) {
-    snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_STATUS D_STATUS2_FIRMWARE "\":{\"" D_JSON_VERSION "\":\"%s\",\"" D_JSON_BUILDDATETIME "\":\"%s\",\"" D_JSON_BOOTVERSION "\":%d,\"" D_JSON_COREVERSION "\":\"" ARDUINO_ESP8266_RELEASE "\",\"" D_JSON_SDKVERSION "\":\"%s\"}}"),
-      my_version, GetBuildDateAndTime().c_str(), ESP.getBootVersion(), ESP.getSdkVersion());
-    MqttPublishPrefixTopic_P(option, PSTR(D_CMND_STATUS "2"));
-  }
-
-  if ((0 == payload) || (3 == payload)) {
-    snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_STATUS D_STATUS3_LOGGING "\":{\"" D_CMND_SERIALLOG "\":%d,\"" D_CMND_WEBLOG "\":%d,\"" D_CMND_SYSLOG "\":%d,\"" D_CMND_LOGHOST "\":\"%s\",\"" D_CMND_LOGPORT "\":%d,\"" D_CMND_SSID "1\":\"%s\",\"" D_CMND_SSID "2\":\"%s\",\"" D_CMND_TELEPERIOD "\":%d,\"" D_CMND_SETOPTION "\":\"%08X\"}}"),
-      Settings.seriallog_level, Settings.weblog_level, Settings.syslog_level, Settings.syslog_host, Settings.syslog_port, Settings.sta_ssid[0], Settings.sta_ssid[1], Settings.tele_period, Settings.flag.data);
-    MqttPublishPrefixTopic_P(option, PSTR(D_CMND_STATUS "3"));
-  }
-
-  if ((0 == payload) || (4 == payload)) {
-    snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_STATUS D_STATUS4_MEMORY "\":{\"" D_JSON_PROGRAMSIZE "\":%d,\"" D_JSON_FREEMEMORY "\":%d,\"" D_JSON_HEAPSIZE "\":%d,\"" D_JSON_PROGRAMFLASHSIZE "\":%d,\"" D_JSON_FLASHSIZE "\":%d,\"" D_JSON_FLASHMODE "\":%d}}"),
-      ESP.getSketchSize()/1024, ESP.getFreeSketchSpace()/1024, ESP.getFreeHeap()/1024, ESP.getFlashChipSize()/1024, ESP.getFlashChipRealSize()/1024, ESP.getFlashChipMode());
-    MqttPublishPrefixTopic_P(option, PSTR(D_CMND_STATUS "4"));
-  }
-
-  if ((0 == payload) || (5 == payload)) {
-    snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_STATUS D_STATUS5_NETWORK "\":{\"" D_CMND_HOSTNAME "\":\"%s\",\"" D_CMND_IPADDRESS "\":\"%s\",\"" D_JSON_GATEWAY "\":\"%s\",\"" D_JSON_SUBNETMASK "\":\"%s\",\"" D_JSON_DNSSERVER "\":\"%s\",\"" D_JSON_MAC "\":\"%s\",\"" D_CMND_WEBSERVER "\":%d,\"" D_CMND_WIFICONFIG "\":%d}}"),
-      my_hostname, WiFi.localIP().toString().c_str(), IPAddress(Settings.ip_address[1]).toString().c_str(), IPAddress(Settings.ip_address[2]).toString().c_str(), IPAddress(Settings.ip_address[3]).toString().c_str(),
-      WiFi.macAddress().c_str(), Settings.webserver, Settings.sta_config);
-    MqttPublishPrefixTopic_P(option, PSTR(D_CMND_STATUS "5"));
-  }
-
-  if (((0 == payload) || (6 == payload)) && Settings.flag.mqtt_enabled) {
-    snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_STATUS D_STATUS6_MQTT "\":{\"" D_CMND_MQTTHOST "\":\"%s\",\"" D_CMND_MQTTPORT "\":%d,\"" D_CMND_MQTTCLIENT D_JSON_MASK "\":\"%s\",\"" D_CMND_MQTTCLIENT "\":\"%s\",\"" D_CMND_MQTTUSER "\":\"%s\",\"MAX_PACKET_SIZE\":%d,\"KEEPALIVE\":%d}}"),
-      Settings.mqtt_host, Settings.mqtt_port, Settings.mqtt_client, mqtt_client, Settings.mqtt_user, MQTT_MAX_PACKET_SIZE, MQTT_KEEPALIVE);
-    MqttPublishPrefixTopic_P(option, PSTR(D_CMND_STATUS "6"));
-  }
-
-  if ((0 == payload) || (7 == payload)) {
-    snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_STATUS D_STATUS7_TIME "\":{\"" D_JSON_UTC_TIME "\":\"%s\",\"" D_JSON_LOCAL_TIME "\":\"%s\",\"" D_JSON_STARTDST "\":\"%s\",\"" D_JSON_ENDDST "\":\"%s\",\"" D_CMND_TIMEZONE "\":%d}}"),
-      GetTime(0).c_str(), GetTime(1).c_str(), GetTime(2).c_str(), GetTime(3).c_str(), Settings.timezone);
-    MqttPublishPrefixTopic_P(option, PSTR(D_CMND_STATUS "7"));
-  }
-
-  if (energy_flg) {
-    if ((0 == payload) || (9 == payload)) {
-      snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_STATUS D_STATUS9_MARGIN "\":{\"" D_CMND_POWERLOW "\":%d,\"" D_CMND_POWERHIGH "\":%d,\"" D_CMND_VOLTAGELOW "\":%d,\"" D_CMND_VOLTAGEHIGH "\":%d,\"" D_CMND_CURRENTLOW "\":%d,\"" D_CMND_CURRENTHIGH "\":%d}}"),
-        Settings.energy_min_power, Settings.energy_max_power, Settings.energy_min_voltage, Settings.energy_max_voltage, Settings.energy_min_current, Settings.energy_max_current);
-      MqttPublishPrefixTopic_P(option, PSTR(D_CMND_STATUS "9"));
-    }
-  }
-
-  if ((0 == payload) || (8 == payload) || (10 == payload)) {
-    snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_STATUS D_STATUS10_SENSOR "\":"));
-    MqttShowSensor();
-    snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s}"), mqtt_data);
-    if (8 == payload) {
-      MqttPublishPrefixTopic_P(option, PSTR(D_CMND_STATUS "8"));
-    } else {
-      MqttPublishPrefixTopic_P(option, PSTR(D_CMND_STATUS "10"));
-    }
-  }
-
-  if ((0 == payload) || (11 == payload)) {
-    snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_CMND_STATUS D_STATUS11_STATUS "\":"));
-    MqttShowState();
-    snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s}"), mqtt_data);
-    MqttPublishPrefixTopic_P(option, PSTR(D_CMND_STATUS "11"));
-  }
-
-}
-
-void MqttShowState()
+void MqttShowState(void)
 {
   char stemp1[33];
 
-  snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s{\"" D_JSON_TIME "\":\"%s\",\"" D_JSON_UPTIME "\":\"%s\""), mqtt_data, GetDateAndTime(DT_LOCAL).c_str(), GetDateAndTime(DT_UPTIME).c_str());
+  ResponseAppendTime();
+  ResponseAppend_P(PSTR(",\"" D_JSON_UPTIME "\":\"%s\",\"UptimeSec\":%u"), GetUptime().c_str(), UpTime());
+
 #ifdef USE_ADC_VCC
   dtostrfd((double)ESP.getVcc()/1000, 3, stemp1);
-  snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s,\"" D_JSON_VCC "\":%s"), mqtt_data, stemp1);
+  ResponseAppend_P(PSTR(",\"" D_JSON_VCC "\":%s"), stemp1);
 #endif
 
-  for (byte i = 0; i < devices_present; i++) {
-    if (i == light_device -1) {
-      LightState(1);
+  ResponseAppend_P(PSTR(",\"" D_JSON_HEAPSIZE "\":%d,\"SleepMode\":\"%s\",\"Sleep\":%u,\"LoadAvg\":%u,\"MqttCount\":%u"),
+    ESP.getFreeHeap()/1024, GetTextIndexed(stemp1, sizeof(stemp1), Settings.flag3.sleep_normal, kSleepMode), sleep, loop_load_avg, MqttConnectCount());
+
+  for (uint32_t i = 1; i <= devices_present; i++) {
+#ifdef USE_LIGHT
+    if ((LightDevice()) && (i >= LightDevice())) {
+      if (i == LightDevice())  { LightState(1); }    // call it only once
     } else {
-      snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s,\"%s\":\"%s\""), mqtt_data, GetPowerDevice(stemp1, i +1, sizeof(stemp1)), GetStateText(bitRead(power, i)));
+#endif
+      ResponseAppend_P(PSTR(",\"%s\":\"%s\""), GetPowerDevice(stemp1, i, sizeof(stemp1), Settings.flag.device_index_enable), GetStateText(bitRead(power, i-1)));
+#ifdef USE_SONOFF_IFAN
+      if (IsModuleIfan()) {
+        ResponseAppend_P(PSTR(",\"" D_CMND_FANSPEED "\":%d"), GetFanspeed());
+        break;
+      }
+#endif  // USE_SONOFF_IFAN
+#ifdef USE_LIGHT
     }
+#endif
   }
 
-  snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s,\"" D_JSON_WIFI "\":{\"" D_JSON_AP "\":%d,\"" D_JSON_SSID "\":\"%s\",\"" D_JSON_RSSI "\":%d,\"" D_JSON_APMAC_ADDRESS "\":\"%s\"}}"),
-    mqtt_data, Settings.sta_active +1, Settings.sta_ssid[Settings.sta_active], WifiGetRssiAsQuality(WiFi.RSSI()), WiFi.BSSIDstr().c_str());
+  if (pwm_present) {
+    ResponseAppend_P(PSTR(","));
+    MqttShowPWMState();
+  }
+
+  ResponseAppend_P(PSTR(",\"" D_JSON_WIFI "\":{\"" D_JSON_AP "\":%d,\"" D_JSON_SSID "\":\"%s\",\"" D_JSON_BSSID "\":\"%s\",\"" D_JSON_CHANNEL "\":%d,\"" D_JSON_RSSI "\":%d,\"" D_JSON_LINK_COUNT "\":%d,\"" D_JSON_DOWNTIME "\":\"%s\"}}"),
+    Settings.sta_active +1, Settings.sta_ssid[Settings.sta_active], WiFi.BSSIDstr().c_str(), WiFi.channel(), WifiGetRssiAsQuality(WiFi.RSSI()), WifiLinkCount(), WifiDowntime().c_str());
 }
 
-boolean MqttShowSensor()
+void MqttPublishTeleState(void)
 {
-  snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s{\"" D_JSON_TIME "\":\"%s\""), mqtt_data, GetDateAndTime(DT_LOCAL).c_str());
+  mqtt_data[0] = '\0';
+  MqttShowState();
+  MqttPublishPrefixTopic_P(TELE, PSTR(D_RSLT_STATE), MQTT_TELE_RETAIN);
+#ifdef USE_SCRIPT
+  RulesTeleperiod();  // Allow rule based HA messages
+#endif  // USE_SCRIPT
+}
+
+bool MqttShowSensor(void)
+{
+  ResponseAppendTime();
+
   int json_data_start = strlen(mqtt_data);
-  for (byte i = 0; i < MAX_SWITCHES; i++) {
+  for (uint32_t i = 0; i < MAX_SWITCHES; i++) {
+#ifdef USE_TM1638
+    if ((pin[GPIO_SWT1 +i] < 99) || ((pin[GPIO_TM16CLK] < 99) && (pin[GPIO_TM16DIO] < 99) && (pin[GPIO_TM16STB] < 99))) {
+#else
     if (pin[GPIO_SWT1 +i] < 99) {
-      boolean swm = ((FOLLOW_INV == Settings.switchmode[i]) || (PUSHBUTTON_INV == Settings.switchmode[i]) || (PUSHBUTTONHOLD_INV == Settings.switchmode[i]));
-      snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s,\"" D_JSON_SWITCH "%d\":\"%s\""), mqtt_data, i +1, GetStateText(swm ^ lastwallswitch[i]));
+#endif  // USE_TM1638
+      bool swm = ((FOLLOW_INV == Settings.switchmode[i]) || (PUSHBUTTON_INV == Settings.switchmode[i]) || (PUSHBUTTONHOLD_INV == Settings.switchmode[i]));
+      ResponseAppend_P(PSTR(",\"" D_JSON_SWITCH "%d\":\"%s\""), i +1, GetStateText(swm ^ SwitchLastState(i)));
     }
   }
   XsnsCall(FUNC_JSON_APPEND);
-  boolean json_data_available = (strlen(mqtt_data) - json_data_start);
-  if (strstr_P(mqtt_data, PSTR(D_JSON_TEMPERATURE))) {
-    snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s,\"" D_JSON_TEMPERATURE_UNIT "\":\"%c\""), mqtt_data, TempUnit());
-  }
-  snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s}"), mqtt_data);
+  XdrvCall(FUNC_JSON_APPEND);
 
-  if (json_data_available) {
-    XdrvCall(FUNC_SHOW_SENSOR);
+  bool json_data_available = (strlen(mqtt_data) - json_data_start);
+  if (strstr_P(mqtt_data, PSTR(D_JSON_PRESSURE)) != nullptr) {
+    ResponseAppend_P(PSTR(",\"" D_JSON_PRESSURE_UNIT "\":\"%s\""), PressureUnit().c_str());
   }
+  if (strstr_P(mqtt_data, PSTR(D_JSON_TEMPERATURE)) != nullptr) {
+    ResponseAppend_P(PSTR(",\"" D_JSON_TEMPERATURE_UNIT "\":\"%c\""), TempUnit());
+  }
+  ResponseJsonEnd();
+
+  if (json_data_available) { XdrvCall(FUNC_SHOW_SENSOR); }
   return json_data_available;
 }
 
 /********************************************************************************************/
 
-void PerformEverySecond()
+void PerformEverySecond(void)
 {
   uptime++;
 
-  if (blockgpio0) {
-    blockgpio0--;
+  if (ntp_synced_message) {
+    // Moved here to fix syslog UDP exception 9 during RtcSecond
+    AddLog_P2(LOG_LEVEL_DEBUG, PSTR("NTP: Drift %d, (" D_UTC_TIME ") %s, (" D_DST_TIME ") %s, (" D_STD_TIME ") %s"),
+      DriftTime(), GetTime(0).c_str(), GetTime(2).c_str(), GetTime(3).c_str());
+    ntp_synced_message = false;
   }
 
-  for (byte i = 0; i < MAX_PULSETIMERS; i++) {
-    if (pulse_timer[i] > 111) {
-      pulse_timer[i]--;
-    }
+  if (BOOT_LOOP_TIME == uptime) {
+    RtcReboot.fast_reboot_count = 0;
+    RtcRebootSave();
+
+    Settings.bootcount++;              // Moved to here to stop flash writes during start-up
+    AddLog_P2(LOG_LEVEL_DEBUG, PSTR(D_LOG_APPLICATION D_BOOT_COUNT " %d"), Settings.bootcount);
   }
 
   if (seriallog_timer) {
@@ -1441,21 +797,14 @@ void PerformEverySecond()
   if (syslog_timer) {  // Restore syslog level
     syslog_timer--;
     if (!syslog_timer) {
-      syslog_level = (Settings.flag2.emulation) ? 0 : Settings.syslog_level;
+      syslog_level = Settings.syslog_level;
       if (Settings.syslog_level) {
         AddLog_P(LOG_LEVEL_INFO, PSTR(D_LOG_APPLICATION D_SYSLOG_LOGGING_REENABLED));  // Might trigger disable again (on purpose)
       }
     }
   }
 
-  if (status_update_timer) {
-    status_update_timer--;
-    if (!status_update_timer) {
-      for (byte i = 1; i <= devices_present; i++) {
-        MqttPublishPowerState(i);
-      }
-    }
-  }
+  ResetGlobalValues();
 
   if (Settings.tele_period) {
     tele_period++;
@@ -1465,376 +814,135 @@ void PerformEverySecond()
     if (tele_period >= Settings.tele_period) {
       tele_period = 0;
 
-      mqtt_data[0] = '\0';
-      MqttShowState();
-      MqttPublishPrefixTopic_P(TELE, PSTR(D_RSLT_STATE));
+      MqttPublishTeleState();
 
       mqtt_data[0] = '\0';
       if (MqttShowSensor()) {
         MqttPublishPrefixTopic_P(TELE, PSTR(D_RSLT_SENSOR), Settings.flag.mqtt_sensor_retain);
+#if defined(USE_RULES) || defined(USE_SCRIPT)
+        RulesTeleperiod();  // Allow rule based HA messages
+#endif  // USE_RULES
       }
-
     }
   }
 
   XdrvCall(FUNC_EVERY_SECOND);
   XsnsCall(FUNC_EVERY_SECOND);
-
-  if ((2 == RtcTime.minute) && latest_uptime_flag) {
-    latest_uptime_flag = false;
-    snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"" D_JSON_TIME "\":\"%s\",\"" D_JSON_UPTIME "\":\"%s\"}"), GetDateAndTime(DT_LOCAL).c_str(), GetDateAndTime(DT_UPTIME).c_str());
-    MqttPublishPrefixTopic_P(TELE, PSTR(D_RSLT_UPTIME));
-  }
-  if ((3 == RtcTime.minute) && !latest_uptime_flag) {
-    latest_uptime_flag = true;
-  }
 }
 
 /*********************************************************************************************\
- * Button handler with single press only or multi-press and hold on all buttons
+ * State loops
 \*********************************************************************************************/
-
-void ButtonHandler()
-{
-  uint8_t button = NOT_PRESSED;
-  uint8_t button_present = 0;
-  char scmnd[20];
-
-  uint8_t maxdev = (devices_present > MAX_KEYS) ? MAX_KEYS : devices_present;
-  for (byte button_index = 0; button_index < maxdev; button_index++) {
-    button = NOT_PRESSED;
-    button_present = 0;
-
-    if (!button_index && ((SONOFF_DUAL == Settings.module) || (CH4 == Settings.module))) {
-      button_present = 1;
-      if (dual_button_code) {
-        snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_APPLICATION D_BUTTON " " D_CODE " %04X"), dual_button_code);
-        AddLog(LOG_LEVEL_DEBUG);
-        button = PRESSED;
-        if (0xF500 == dual_button_code) {             // Button hold
-          holdbutton[button_index] = (Settings.param[P_HOLD_TIME] * (STATES / 10)) -1;
-        }
-        dual_button_code = 0;
-      }
-    } else {
-      if ((pin[GPIO_KEY1 +button_index] < 99) && !blockgpio0) {
-        button_present = 1;
-        button = digitalRead(pin[GPIO_KEY1 +button_index]);
-      }
-    }
-
-    if (button_present) {
-      if (SONOFF_4CHPRO == Settings.module) {
-        if (holdbutton[button_index]) {
-          holdbutton[button_index]--;
-        }
-
-        boolean button_pressed = false;
-        if ((PRESSED == button) && (NOT_PRESSED == lastbutton[button_index])) {
-          snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_APPLICATION D_BUTTON "%d " D_LEVEL_10), button_index +1);
-          AddLog(LOG_LEVEL_DEBUG);
-          holdbutton[button_index] = STATES;
-          button_pressed = true;
-        }
-        if ((NOT_PRESSED == button) && (PRESSED == lastbutton[button_index])) {
-          snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_APPLICATION D_BUTTON "%d " D_LEVEL_01), button_index +1);
-          AddLog(LOG_LEVEL_DEBUG);
-          if (!holdbutton[button_index]) {                       // Do not allow within 1 second
-            button_pressed = true;
-          }
-        }
-        if (button_pressed) {
-          if (!send_button_power(0, button_index +1, POWER_TOGGLE)) {  // Execute Toggle command via MQTT if ButtonTopic is set
-            ExecuteCommandPower(button_index +1, POWER_TOGGLE);  // Execute Toggle command internally
-          }
-        }
-      } else {
-        if ((PRESSED == button) && (NOT_PRESSED == lastbutton[button_index])) {
-          if (Settings.flag.button_single) {          // Allow only single button press for immediate action
-            snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_APPLICATION D_BUTTON "%d " D_IMMEDIATE), button_index +1);
-            AddLog(LOG_LEVEL_DEBUG);
-            if (!send_button_power(0, button_index +1, POWER_TOGGLE)) {  // Execute Toggle command via MQTT if ButtonTopic is set
-              ExecuteCommandPower(button_index +1, POWER_TOGGLE);  // Execute Toggle command internally
-            }
-          } else {
-            multipress[button_index] = (multiwindow[button_index]) ? multipress[button_index] +1 : 1;
-            snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_APPLICATION D_BUTTON "%d " D_MULTI_PRESS " %d"), button_index +1, multipress[button_index]);
-            AddLog(LOG_LEVEL_DEBUG);
-            multiwindow[button_index] = STATES /2;               // 0.5 second multi press window
-          }
-          blinks = 201;
-        }
-
-        if (NOT_PRESSED == button) {
-          holdbutton[button_index] = 0;
-        } else {
-          holdbutton[button_index]++;
-          if (Settings.flag.button_single) {          // Allow only single button press for immediate action
-            if (holdbutton[button_index] == Settings.param[P_HOLD_TIME] * (STATES / 10) * 4) {  // Button hold for four times longer
-//              Settings.flag.button_single = 0;
-              snprintf_P(scmnd, sizeof(scmnd), PSTR(D_CMND_SETOPTION "13 0"));  // Disable single press only
-              ExecuteCommand(scmnd);
-            }
-          } else {
-            if (holdbutton[button_index] == Settings.param[P_HOLD_TIME] * (STATES / 10)) {  // Button hold
-              multipress[button_index] = 0;
-              if (!Settings.flag.button_restrict) {   // No button restriction
-                snprintf_P(scmnd, sizeof(scmnd), PSTR(D_CMND_RESET " 1"));
-                ExecuteCommand(scmnd);
-              } else {
-                send_button_power(0, button_index +1, 3);        // Execute Hold command via MQTT if ButtonTopic is set
-              }
-            }
-          }
-        }
-
-        if (!Settings.flag.button_single) {           // Allow multi-press
-          if (multiwindow[button_index]) {
-            multiwindow[button_index]--;
-          } else {
-            if (!restart_flag && !holdbutton[button_index] && (multipress[button_index] > 0) && (multipress[button_index] < MAX_BUTTON_COMMANDS +3)) {
-              boolean single_press = false;
-              if (multipress[button_index] < 3) {                // Single or Double press
-                if ((SONOFF_DUAL_R2 == Settings.module) || (SONOFF_DUAL == Settings.module) || (CH4 == Settings.module)) {
-                  single_press = true;
-                } else  {
-                  single_press = (Settings.flag.button_swap +1 == multipress[button_index]);
-                  multipress[button_index] = 1;
-                }
-              }
-              if (single_press && send_button_power(0, button_index + multipress[button_index], POWER_TOGGLE)) {  // Execute Toggle command via MQTT if ButtonTopic is set
-                // Success
-              } else {
-                if (multipress[button_index] < 3) {              // Single or Double press
-                  if (WifiState()) {                  // WPSconfig, Smartconfig or Wifimanager active
-                    restart_flag = 1;
-                  } else {
-                    ExecuteCommandPower(button_index + multipress[button_index], POWER_TOGGLE);  // Execute Toggle command internally
-                  }
-                } else {                              // 3 - 7 press
-                  if (!Settings.flag.button_restrict) {
-                    snprintf_P(scmnd, sizeof(scmnd), kCommands[multipress[button_index] -3]);
-                    ExecuteCommand(scmnd);
-                  }
-                }
-              }
-              multipress[button_index] = 0;
-            }
-          }
-        }
-      }
-    }
-    lastbutton[button_index] = button;
-  }
-}
-
-/*********************************************************************************************\
- * Switch handler
-\*********************************************************************************************/
-
-void SwitchHandler()
-{
-  uint8_t button = NOT_PRESSED;
-  uint8_t switchflag;
-
-  for (byte i = 0; i < MAX_SWITCHES; i++) {
-    if (pin[GPIO_SWT1 +i] < 99) {
-
-      if (holdwallswitch[i]) {
-        holdwallswitch[i]--;
-        if (0 == holdwallswitch[i]) {
-          send_button_power(1, i +1, 3);         // Execute command via MQTT
-        }
-      }
-
-      button = digitalRead(pin[GPIO_SWT1 +i]);
-      if (button != lastwallswitch[i]) {
-        switchflag = 3;
-        switch (Settings.switchmode[i]) {
-        case TOGGLE:
-          switchflag = 2;                // Toggle
-          break;
-        case FOLLOW:
-          switchflag = button &1;        // Follow wall switch state
-          break;
-        case FOLLOW_INV:
-          switchflag = ~button &1;       // Follow inverted wall switch state
-          break;
-        case PUSHBUTTON:
-          if ((PRESSED == button) && (NOT_PRESSED == lastwallswitch[i])) {
-            switchflag = 2;              // Toggle with pushbutton to Gnd
-          }
-          break;
-        case PUSHBUTTON_INV:
-          if ((NOT_PRESSED == button) && (PRESSED == lastwallswitch[i])) {
-            switchflag = 2;              // Toggle with releasing pushbutton from Gnd
-          }
-          break;
-        case PUSHBUTTON_TOGGLE:
-          if (button != lastwallswitch[i]) {
-            switchflag = 2;              // Toggle with any pushbutton change
-          }
-          break;
-        case PUSHBUTTONHOLD:
-          if ((PRESSED == button) && (NOT_PRESSED == lastwallswitch[i])) {
-            holdwallswitch[i] = Settings.param[P_HOLD_TIME] * (STATES / 10);
-          }
-          if ((NOT_PRESSED == button) && (PRESSED == lastwallswitch[i]) && (holdwallswitch[i])) {
-            holdwallswitch[i] = 0;
-            switchflag = 2;              // Toggle with pushbutton to Gnd
-          }
-          break;
-        case PUSHBUTTONHOLD_INV:
-          if ((NOT_PRESSED == button) && (PRESSED == lastwallswitch[i])) {
-            holdwallswitch[i] = Settings.param[P_HOLD_TIME] * (STATES / 10);
-          }
-          if ((PRESSED == button) && (NOT_PRESSED == lastwallswitch[i]) && (holdwallswitch[i])) {
-            holdwallswitch[i] = 0;
-            switchflag = 2;             // Toggle with pushbutton to Gnd
-          }
-          break;
-        }
-
-        if (switchflag < 3) {
-          if (!send_button_power(1, i +1, switchflag)) {  // Execute command via MQTT
-            ExecuteCommandPower(i +1, switchflag);        // Execute command internally (if i < devices_present)
-          }
-        }
-
-        lastwallswitch[i] = button;
-      }
-    }
-  }
-}
-
-/*********************************************************************************************\
- * State loop
-\*********************************************************************************************/
-
-void StateLoop()
-{
-  power_t power_now;
-
-  state_loop_timer = millis() + (1000 / STATES);
-  state++;
-
-/*-------------------------------------------------------------------------------------------*\
- * Every second
-\*-------------------------------------------------------------------------------------------*/
-
-  if (STATES == state) {
-    state = 0;
-    PerformEverySecond();
-  }
-
 /*-------------------------------------------------------------------------------------------*\
  * Every 0.1 second
 \*-------------------------------------------------------------------------------------------*/
 
-  if (!(state % (STATES/10))) {
+void Every100mSeconds(void)
+{
+  // As the max amount of sleep = 250 mSec this loop will shift in time...
+  power_t power_now;
 
-    if (mqtt_cmnd_publish) {
-      mqtt_cmnd_publish--;  // Clean up
-    }
+  if (latching_relay_pulse) {
+    latching_relay_pulse--;
+    if (!latching_relay_pulse) SetLatchingRelay(0, 0);
+  }
 
-    if (latching_relay_pulse) {
-      latching_relay_pulse--;
-      if (!latching_relay_pulse) {
-        SetLatchingRelay(0, 0);
+  for (uint32_t i = 0; i < MAX_PULSETIMERS; i++) {
+    if (pulse_timer[i] != 0L) {           // Timer active?
+      if (TimeReached(pulse_timer[i])) {  // Timer finished?
+        pulse_timer[i] = 0L;              // Turn off this timer
+        ExecuteCommandPower(i +1, (POWER_ALL_OFF_PULSETIME_ON == Settings.poweronstate) ? POWER_ON : POWER_OFF, SRC_PULSETIMER);
       }
-    }
-
-    for (byte i = 0; i < MAX_PULSETIMERS; i++) {
-      if ((pulse_timer[i] > 0) && (pulse_timer[i] < 112)) {
-        pulse_timer[i]--;
-        if (!pulse_timer[i]) {
-//          ExecuteCommandPower(i +1, POWER_OFF);
-          ExecuteCommandPower(i +1, (POWER_ALL_OFF_PULSETIME_ON == Settings.poweronstate) ? POWER_ON : POWER_OFF);
-        }
-      }
-    }
-
-    if (blink_mask) {
-      blink_timer--;
-      if (!blink_timer) {
-        blink_timer = Settings.blinktime;
-        blink_counter--;
-        if (!blink_counter) {
-          StopAllPowerBlink();
-        } else {
-          blink_power ^= 1;
-          power_now = (power & (POWER_MASK ^ blink_mask)) | ((blink_power) ? blink_mask : 0);
-          SetDevicePower(power_now);
-        }
-      }
-    }
-
-    // Backlog
-    if (backlog_delay) {
-      backlog_delay--;
-    }
-    if ((backlog_pointer != backlog_index) && !backlog_delay && !backlog_mutex) {
-      backlog_mutex = 1;
-      ExecuteCommand((char*)backlog[backlog_pointer].c_str());
-      backlog_mutex = 0;
-      backlog_pointer++;
-/*
-    if (backlog_pointer >= MAX_BACKLOG) {
-      backlog_pointer = 0;
-    }
-*/
-      backlog_pointer &= 0xF;
     }
   }
 
-/*-------------------------------------------------------------------------------------------*\
- * Every 0.05 second
-\*-------------------------------------------------------------------------------------------*/
-
-  ButtonHandler();
-  SwitchHandler();
-
-  XdrvCall(FUNC_EVERY_50_MSECOND);
-  XsnsCall(FUNC_EVERY_50_MSECOND);
-
-/*-------------------------------------------------------------------------------------------*\
- * Every 0.2 second
-\*-------------------------------------------------------------------------------------------*/
-
-  if (!(state % ((STATES/10)*2))) {
-    if (blinks || restart_flag || ota_state_flag) {
-      if (restart_flag || ota_state_flag) {
-        blinkstate = 1;   // Stay lit
+  if (blink_mask) {
+    if (TimeReached(blink_timer)) {
+      SetNextTimeInterval(blink_timer, 100 * Settings.blinktime);
+      blink_counter--;
+      if (!blink_counter) {
+        StopAllPowerBlink();
       } else {
-        blinkstate ^= 1;  // Blink
-      }
-      if ((!(Settings.ledstate &0x08)) && ((Settings.ledstate &0x06) || (blinks > 200) || (blinkstate))) {
-        SetLedPower(blinkstate);
-      }
-      if (!blinkstate) {
-        blinks--;
-        if (200 == blinks) {
-          blinks = 0;
-        }
-      }
-    } else {
-      if (Settings.ledstate &1) {
-        boolean tstate = power;
-        if ((SONOFF_TOUCH == Settings.module) || (SONOFF_T11 == Settings.module) || (SONOFF_T12 == Settings.module) || (SONOFF_T13 == Settings.module)) {
-          tstate = (!power) ? 1 : 0;
-        }
-        SetLedPower(tstate);
+        blink_power ^= 1;
+        power_now = (power & (POWER_MASK ^ blink_mask)) | ((blink_power) ? blink_mask : 0);
+        SetDevicePower(power_now, SRC_IGNORE);
       }
     }
   }
 
+  // Backlog
+  if (TimeReached(backlog_delay)) {
+    if (!BACKLOG_EMPTY && !backlog_mutex) {
+      backlog_mutex = true;
+#ifdef SUPPORT_IF_STATEMENT
+      ExecuteCommand((char*)backlog.shift().c_str(), SRC_BACKLOG);
+#else
+      ExecuteCommand((char*)backlog[backlog_pointer].c_str(), SRC_BACKLOG);
+      backlog_pointer++;
+      if (backlog_pointer >= MAX_BACKLOG) { backlog_pointer = 0; }
+#endif
+      backlog_mutex = false;
+    }
+  }
+}
+
 /*-------------------------------------------------------------------------------------------*\
- * Every second at 0.2 second interval
+ * Every 0.25 second
 \*-------------------------------------------------------------------------------------------*/
 
-  switch (state) {
-  case (STATES/10)*2:
-    if (ota_state_flag && (backlog_pointer == backlog_index)) {
+void Every250mSeconds(void)
+{
+// As the max amount of sleep = 250 mSec this loop should always be taken...
+
+  uint32_t blinkinterval = 1;
+
+  state_250mS++;
+  state_250mS &= 0x3;
+
+  if (mqtt_cmnd_publish) mqtt_cmnd_publish--;             // Clean up
+
+  if (!Settings.flag.global_state) {                      // Problem blinkyblinky enabled
+    if (global_state.data) {                              // Any problem
+      if (global_state.mqtt_down) { blinkinterval = 7; }  // MQTT problem so blink every 2 seconds (slowest)
+      if (global_state.wifi_down) { blinkinterval = 3; }  // Wifi problem so blink every second (slow)
+      blinks = 201;                                       // Allow only a single blink in case the problem is solved
+    }
+  }
+  if (blinks || restart_flag || ota_state_flag) {
+    if (restart_flag || ota_state_flag) {                 // Overrule blinks and keep led lit
+      blinkstate = true;                                  // Stay lit
+    } else {
+      blinkspeed--;
+      if (!blinkspeed) {
+        blinkspeed = blinkinterval;                       // Set interval to 0.2 (default), 1 or 2 seconds
+        blinkstate ^= 1;                                  // Blink
+      }
+    }
+    if ((!(Settings.ledstate &0x08)) && ((Settings.ledstate &0x06) || (blinks > 200) || (blinkstate))) {
+      SetLedLink(blinkstate);                            // Set led on or off
+    }
+    if (!blinkstate) {
+      blinks--;
+      if (200 == blinks) blinks = 0;                      // Disable blink
+    }
+  }
+  if (Settings.ledstate &1 && (pin[GPIO_LEDLNK] < 99 || !(blinks || restart_flag || ota_state_flag)) ) {
+    bool tstate = power & Settings.ledmask;
+    if ((SONOFF_TOUCH == my_module_type) || (SONOFF_T11 == my_module_type) || (SONOFF_T12 == my_module_type) || (SONOFF_T13 == my_module_type)) {
+      tstate = (!power) ? 1 : 0;                          // As requested invert signal for Touch devices to find them in the dark
+    }
+    SetLedPower(tstate);
+  }
+
+/*-------------------------------------------------------------------------------------------*\
+ * Every second at 0.25 second interval
+\*-------------------------------------------------------------------------------------------*/
+
+  switch (state_250mS) {
+  case 0:                                                 // Every x.0 second
+    PerformEverySecond();
+
+    if (ota_state_flag && BACKLOG_EMPTY) {
       ota_state_flag--;
       if (2 == ota_state_flag) {
         ota_url = Settings.ota_url;
@@ -1845,9 +953,7 @@ void StateLoop()
       }
       if (ota_state_flag <= 0) {
 #ifdef USE_WEBSERVER
-        if (Settings.webserver) {
-          StopWebserver();
-        }
+        if (Settings.webserver) StopWebserver();
 #endif  // USE_WEBSERVER
 #ifdef USE_ARILUX_RF
         AriluxRfDisable();  // Prevent restart exception on Arilux Interrupt routine
@@ -1857,32 +963,35 @@ void StateLoop()
         ota_retry_counter--;
         if (ota_retry_counter) {
           strlcpy(mqtt_data, GetOtaUrl(log_data, sizeof(log_data)), sizeof(mqtt_data));
-#ifndef BE_MINIMAL
+#ifndef FIRMWARE_MINIMAL
           if (RtcSettings.ota_loader) {
-            char *pch = strrchr(mqtt_data, '-');  // Change from filename-DE.bin into filename-minimal.bin
-            char *ech = strrchr(mqtt_data, '.');  // Change from filename.bin into filename-minimal.bin
-            if (!pch) {
-              pch = ech;
-            }
+            char *bch = strrchr(mqtt_data, '/');                        // Only consider filename after last backslash prevent change of urls having "-" in it
+            char *pch = strrchr((bch != nullptr) ? bch : mqtt_data, '-');  // Change from filename-DE.bin into filename-minimal.bin
+            char *ech = strrchr((bch != nullptr) ? bch : mqtt_data, '.');  // Change from filename.bin into filename-minimal.bin
+            if (!pch) { pch = ech; }
             if (pch) {
               mqtt_data[pch - mqtt_data] = '\0';
               char *ech = strrchr(Settings.ota_url, '.');  // Change from filename.bin into filename-minimal.bin
               snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s-" D_JSON_MINIMAL "%s"), mqtt_data, ech);  // Minimal filename must be filename-minimal
             }
           }
-#endif  // BE_MINIMAL
-          snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_UPLOAD "%s"), mqtt_data);
-          AddLog(LOG_LEVEL_DEBUG);
+#endif  // FIRMWARE_MINIMAL
+          AddLog_P2(LOG_LEVEL_DEBUG, PSTR(D_LOG_UPLOAD "%s"), mqtt_data);
+#if defined(ARDUINO_ESP8266_RELEASE_2_3_0) || defined(ARDUINO_ESP8266_RELEASE_2_4_0) || defined(ARDUINO_ESP8266_RELEASE_2_4_1) || defined(ARDUINO_ESP8266_RELEASE_2_4_2)
           ota_result = (HTTP_UPDATE_FAILED != ESPhttpUpdate.update(mqtt_data));
+#else
+          // If using core stage or 2.5.0+ the syntax has changed
+          WiFiClient OTAclient;
+          ota_result = (HTTP_UPDATE_FAILED != ESPhttpUpdate.update(OTAclient, mqtt_data));
+#endif
           if (!ota_result) {
-#ifndef BE_MINIMAL
+#ifndef FIRMWARE_MINIMAL
             int ota_error = ESPhttpUpdate.getLastError();
-//            snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_UPLOAD "Ota error %d"), ota_error);
-//            AddLog(LOG_LEVEL_DEBUG);
+            DEBUG_CORE_LOG(PSTR("OTA: Error %d"), ota_error);
             if ((HTTP_UE_TOO_LESS_SPACE == ota_error) || (HTTP_UE_BIN_FOR_WRONG_FLASH == ota_error)) {
               RtcSettings.ota_loader = 1;  // Try minimal image next
             }
-#endif  // BE_MINIMAL
+#endif  // FIRMWARE_MINIMAL
             ota_state_flag = 2;    // Upgrade failed - retry
           }
         }
@@ -1890,26 +999,26 @@ void StateLoop()
       if (90 == ota_state_flag) {  // Allow MQTT to reconnect
         ota_state_flag = 0;
         if (ota_result) {
-          SetFlashModeDout();      // Force DOUT for both ESP8266 and ESP8285
-          snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR(D_JSON_SUCCESSFUL ". " D_JSON_RESTARTING));
+//          SetFlashModeDout();      // Force DOUT for both ESP8266 and ESP8285
+          Response_P(PSTR(D_JSON_SUCCESSFUL ". " D_JSON_RESTARTING));
         } else {
-          snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR(D_JSON_FAILED " %s"), ESPhttpUpdate.getLastErrorString().c_str());
+          Response_P(PSTR(D_JSON_FAILED " %s"), ESPhttpUpdate.getLastErrorString().c_str());
         }
         restart_flag = 2;          // Restart anyway to keep memory clean webserver
         MqttPublishPrefixTopic_P(STAT, PSTR(D_CMND_UPGRADE));
       }
     }
     break;
-  case (STATES/10)*4:
+  case 1:                                                 // Every x.25 second
     if (MidnightNow()) {
-      CounterSaveState();
+      XsnsCall(FUNC_SAVE_AT_MIDNIGHT);
     }
-    if (save_data_counter && (backlog_pointer == backlog_index)) {
+    if (save_data_counter && BACKLOG_EMPTY) {
       save_data_counter--;
       if (save_data_counter <= 0) {
         if (Settings.flag.save_state) {
           power_t mask = POWER_MASK;
-          for (byte i = 0; i < MAX_PULSETIMERS; i++) {
+          for (uint32_t i = 0; i < MAX_PULSETIMERS; i++) {
             if ((Settings.pulse_timer[i] > 0) && (Settings.pulse_timer[i] < 30)) {  // 3 seconds
               mask &= ~(1 << i);
             }
@@ -1924,11 +1033,36 @@ void StateLoop()
         save_data_counter = Settings.save_data;
       }
     }
-    if (restart_flag && (backlog_pointer == backlog_index)) {
-      if (213 == restart_flag) {
+    if (restart_flag && BACKLOG_EMPTY) {
+      if ((214 == restart_flag) || (215 == restart_flag) || (216 == restart_flag)) {
+        char storage_wifi[sizeof(Settings.sta_ssid) +
+                          sizeof(Settings.sta_pwd)];
+        char storage_mqtt[sizeof(Settings.mqtt_host) +
+                          sizeof(Settings.mqtt_port) +
+                          sizeof(Settings.mqtt_client) +
+                          sizeof(Settings.mqtt_user) +
+                          sizeof(Settings.mqtt_pwd) +
+                          sizeof(Settings.mqtt_topic)];
+        memcpy(storage_wifi, Settings.sta_ssid, sizeof(storage_wifi));     // Backup current SSIDs and Passwords
+        if (216 == restart_flag) {
+          memcpy(storage_mqtt, Settings.mqtt_host, sizeof(storage_mqtt));  // Backup mqtt host, port, client, username and password
+        }
+        if ((215 == restart_flag) || (216 == restart_flag)) {
+          SettingsErase(0);  // Erase all flash from program end to end of physical flash
+        }
+        SettingsDefault();
+        memcpy(Settings.sta_ssid, storage_wifi, sizeof(storage_wifi));     // Restore current SSIDs and Passwords
+        if (216 == restart_flag) {
+          memcpy(Settings.mqtt_host, storage_mqtt, sizeof(storage_mqtt));  // Restore the mqtt host, port, client, username and password
+          strlcpy(Settings.mqtt_client, MQTT_CLIENT_ID, sizeof(Settings.mqtt_client));  // Set client to default
+        }
+        restart_flag = 2;
+      }
+      else if (213 == restart_flag) {
         SettingsSdkErase();  // Erase flash SDK parameters
         restart_flag = 2;
-      } else if (212 == restart_flag) {
+      }
+      else if (212 == restart_flag) {
         SettingsErase(0);    // Erase all flash from program end to end of physical flash
         restart_flag = 211;
       }
@@ -1936,148 +1070,271 @@ void StateLoop()
         SettingsDefault();
         restart_flag = 2;
       }
-      SettingsSaveAll();
+      if (2 == restart_flag) {
+        SettingsSaveAll();
+      }
       restart_flag--;
       if (restart_flag <= 0) {
         AddLog_P(LOG_LEVEL_INFO, PSTR(D_LOG_APPLICATION D_RESTARTING));
-        ESP.restart();
+        EspRestart();
       }
     }
     break;
-  case (STATES/10)*6:
+  case 2:                                                 // Every x.5 second
     WifiCheck(wifi_state_flag);
     wifi_state_flag = WIFI_RESTART;
+    break;
+  case 3:                                                 // Every x.75 second
+    if (!global_state.wifi_down) { MqttCheck(); }
     break;
   }
 }
 
+#ifdef USE_ARDUINO_OTA
+/*********************************************************************************************\
+ * Allow updating via the Arduino OTA-protocol.
+ *
+ * - Once started disables current wifi clients and udp
+ * - Perform restart when done to re-init wifi clients
+\*********************************************************************************************/
+
+bool arduino_ota_triggered = false;
+uint16_t arduino_ota_progress_dot_count = 0;
+
+void ArduinoOTAInit(void)
+{
+  ArduinoOTA.setPort(8266);
+  ArduinoOTA.setHostname(my_hostname);
+  if (Settings.web_password[0] !=0) { ArduinoOTA.setPassword(Settings.web_password); }
+
+  ArduinoOTA.onStart([]()
+  {
+    SettingsSave(1);  // Free flash for OTA update
+#ifdef USE_WEBSERVER
+    if (Settings.webserver) { StopWebserver(); }
+#endif  // USE_WEBSERVER
+#ifdef USE_ARILUX_RF
+    AriluxRfDisable();  // Prevent restart exception on Arilux Interrupt routine
+#endif  // USE_ARILUX_RF
+    if (Settings.flag.mqtt_enabled) { MqttDisconnect(); }
+    AddLog_P2(LOG_LEVEL_INFO, PSTR(D_LOG_UPLOAD "Arduino OTA " D_UPLOAD_STARTED));
+    arduino_ota_triggered = true;
+    arduino_ota_progress_dot_count = 0;
+    delay(100);       // Allow time for message xfer
+  });
+
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total)
+  {
+    if ((LOG_LEVEL_DEBUG <= seriallog_level)) {
+      arduino_ota_progress_dot_count++;
+      Serial.printf(".");
+      if (!(arduino_ota_progress_dot_count % 80)) { Serial.println(); }
+    }
+  });
+
+  ArduinoOTA.onError([](ota_error_t error)
+  {
+    /*
+    From ArduinoOTA.h:
+    typedef enum { OTA_AUTH_ERROR, OTA_BEGIN_ERROR, OTA_CONNECT_ERROR, OTA_RECEIVE_ERROR, OTA_END_ERROR } ota_error_t;
+    */
+    char error_str[100];
+
+    if ((LOG_LEVEL_DEBUG <= seriallog_level) && arduino_ota_progress_dot_count) { Serial.println(); }
+    switch (error) {
+      case OTA_BEGIN_ERROR: strncpy_P(error_str, PSTR(D_UPLOAD_ERR_2), sizeof(error_str)); break;
+      case OTA_RECEIVE_ERROR: strncpy_P(error_str, PSTR(D_UPLOAD_ERR_5), sizeof(error_str)); break;
+      case OTA_END_ERROR: strncpy_P(error_str, PSTR(D_UPLOAD_ERR_7), sizeof(error_str)); break;
+      default:
+        snprintf_P(error_str, sizeof(error_str), PSTR(D_UPLOAD_ERROR_CODE " %d"), error);
+    }
+    AddLog_P2(LOG_LEVEL_INFO, PSTR(D_LOG_UPLOAD "Arduino OTA  %s. " D_RESTARTING), error_str);
+    EspRestart();
+  });
+
+  ArduinoOTA.onEnd([]()
+  {
+    if ((LOG_LEVEL_DEBUG <= seriallog_level)) { Serial.println(); }
+    AddLog_P2(LOG_LEVEL_INFO, PSTR(D_LOG_UPLOAD "Arduino OTA " D_SUCCESSFUL ". " D_RESTARTING));
+    EspRestart();
+	});
+
+  ArduinoOTA.begin();
+  AddLog_P2(LOG_LEVEL_INFO, PSTR(D_LOG_UPLOAD "Arduino OTA " D_ENABLED " " D_PORT " 8266"));
+}
+#endif  // USE_ARDUINO_OTA
+
 /********************************************************************************************/
 
-void SerialInput()
+void SerialInput(void)
 {
   while (Serial.available()) {
-    yield();
+//    yield();
+    delay(0);
     serial_in_byte = Serial.read();
 
 /*-------------------------------------------------------------------------------------------*\
  * Sonoff dual and ch4 19200 baud serial interface
 \*-------------------------------------------------------------------------------------------*/
-    if ((SONOFF_DUAL == Settings.module) || (CH4 == Settings.module)) {
-      if (dual_hex_code) {
-        dual_hex_code--;
-        if (dual_hex_code) {
-          dual_button_code = (dual_button_code << 8) | serial_in_byte;
-          serial_in_byte = 0;
-        } else {
-          if (serial_in_byte != 0xA1) {
-            dual_button_code = 0;                // 0xA1 - End of Sonoff dual button code
-          }
-        }
-      }
-      if (0xA0 == serial_in_byte) {              // 0xA0 - Start of Sonoff dual button code
-        serial_in_byte = 0;
-        dual_button_code = 0;
-        dual_hex_code = 3;
-      }
-    }
-
-/*-------------------------------------------------------------------------------------------*\
- * Sonoff bridge 19200 baud serial interface
-\*-------------------------------------------------------------------------------------------*/
-    if (SONOFF_BRIDGE == Settings.module) {
-      if (SonoffBridgeSerialInput()) {
-        serial_in_byte_counter = 0;
-        Serial.flush();
-        return;
-      }
-    }
-
-/*-------------------------------------------------------------------------------------------*\
- * Sonoff S31 4800 baud serial interface
-\*-------------------------------------------------------------------------------------------*/
-    if (SONOFF_S31 == Settings.module) {
-      if (CseSerialInput()) {
-        serial_in_byte_counter = 0;
-        Serial.flush();
-        return;
-      }
+    if ((SONOFF_DUAL == my_module_type) || (CH4 == my_module_type)) {
+      serial_in_byte = ButtonSerial(serial_in_byte);
     }
 
 /*-------------------------------------------------------------------------------------------*/
 
-    if (serial_in_byte > 127) {                // binary data...
+    if (XdrvCall(FUNC_SERIAL)) {
       serial_in_byte_counter = 0;
       Serial.flush();
       return;
     }
-    if (isprint(serial_in_byte)) {
-      if (serial_in_byte_counter < INPUT_BUFFER_SIZE) {  // add char to string if it still fits
-        serial_in_buffer[serial_in_byte_counter++] = serial_in_byte;
-      } else {
-        serial_in_byte_counter = 0;
+
+/*-------------------------------------------------------------------------------------------*/
+
+    if (serial_in_byte > 127 && !Settings.flag.mqtt_serial_raw) {                // Discard binary data above 127 if no raw reception allowed
+      serial_in_byte_counter = 0;
+      Serial.flush();
+      return;
+    }
+    if (!Settings.flag.mqtt_serial) {                                            // SerialSend active
+      if (isprint(serial_in_byte)) {                                             // Any char between 32 and 127
+        if (serial_in_byte_counter < INPUT_BUFFER_SIZE -1) {                     // Add char to string if it still fits
+          serial_in_buffer[serial_in_byte_counter++] = serial_in_byte;
+        } else {
+          serial_in_byte_counter = 0;
+        }
+      }
+    } else {
+      if (serial_in_byte || Settings.flag.mqtt_serial_raw) {                     // Any char between 1 and 127 or any char (0 - 255)
+        if ((serial_in_byte_counter < INPUT_BUFFER_SIZE -1) &&                   // Add char to string if it still fits and ...
+            ((isprint(serial_in_byte) && (128 == Settings.serial_delimiter)) ||  // Any char between 32 and 127
+            ((serial_in_byte != Settings.serial_delimiter) && (128 != Settings.serial_delimiter)) ||  // Any char between 1 and 127 and not being delimiter
+              Settings.flag.mqtt_serial_raw)) {                                  // Any char between 0 and 255
+          serial_in_buffer[serial_in_byte_counter++] = serial_in_byte;
+          serial_polling_window = millis();
+        } else {
+          serial_polling_window = 0;                                             // Reception done - send mqtt
+          break;
+        }
       }
     }
 
 /*-------------------------------------------------------------------------------------------*\
  * Sonoff SC 19200 baud serial interface
 \*-------------------------------------------------------------------------------------------*/
-    if (serial_in_byte == '\x1B') {            // Sonoff SC status from ATMEGA328P
-      serial_in_buffer[serial_in_byte_counter] = 0;  // serial data completed
-      SonoffScSerialInput(serial_in_buffer);
-      serial_in_byte_counter = 0;
-      Serial.flush();
-      return;
+    if (SONOFF_SC == my_module_type) {
+      if (serial_in_byte == '\x1B') {                                            // Sonoff SC status from ATMEGA328P
+        serial_in_buffer[serial_in_byte_counter] = 0;                            // Serial data completed
+        SonoffScSerialInput(serial_in_buffer);
+        serial_in_byte_counter = 0;
+        Serial.flush();
+        return;
+      }
     }
 
 /*-------------------------------------------------------------------------------------------*/
 
-    else if (serial_in_byte == '\n') {
-      serial_in_buffer[serial_in_byte_counter] = 0;  // serial data completed
-      seriallog_level = (Settings.seriallog_level < LOG_LEVEL_INFO) ? (byte)LOG_LEVEL_INFO : Settings.seriallog_level;
-      snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_COMMAND "%s"), serial_in_buffer);
-      AddLog(LOG_LEVEL_INFO);
-      ExecuteCommand(serial_in_buffer);
+    else if (!Settings.flag.mqtt_serial && (serial_in_byte == '\n')) {
+      serial_in_buffer[serial_in_byte_counter] = 0;                              // Serial data completed
+      seriallog_level = (Settings.seriallog_level < LOG_LEVEL_INFO) ? (uint8_t)LOG_LEVEL_INFO : Settings.seriallog_level;
+      AddLog_P2(LOG_LEVEL_INFO, PSTR(D_LOG_COMMAND "%s"), serial_in_buffer);
+      ExecuteCommand(serial_in_buffer, SRC_SERIAL);
       serial_in_byte_counter = 0;
+      serial_polling_window = 0;
       Serial.flush();
       return;
     }
+  }
+
+  if (Settings.flag.mqtt_serial && serial_in_byte_counter && (millis() > (serial_polling_window + SERIAL_POLLING))) {
+    serial_in_buffer[serial_in_byte_counter] = 0;                                // Serial data completed
+    char hex_char[(serial_in_byte_counter * 2) + 2];
+    ResponseTime_P(PSTR(",\"" D_JSON_SERIALRECEIVED "\":\"%s\"}"),
+      (Settings.flag.mqtt_serial_raw) ? ToHex_P((unsigned char*)serial_in_buffer, serial_in_byte_counter, hex_char, sizeof(hex_char)) : serial_in_buffer);
+    MqttPublishPrefixTopic_P(RESULT_OR_TELE, PSTR(D_JSON_SERIALRECEIVED));
+    XdrvRulesProcess();
+    serial_in_byte_counter = 0;
   }
 }
 
 /********************************************************************************************/
 
-void GpioInit()
+void GpioInit(void)
 {
-  uint8_t mpin;
-  mytmplt def_module;
+  uint32_t mpin;
 
-  if (!Settings.module || (Settings.module >= MAXMODULE)) {
-    Settings.module = MODULE;
-    Settings.last_module = MODULE;
+  if (!ValidModule(Settings.module)) {
+    uint32_t module = MODULE;
+    if (!ValidModule(MODULE)) { module = SONOFF_BASIC; }
+    Settings.module = module;
+    Settings.last_module = module;
+  }
+  SetModuleType();
+
+  if (Settings.module != Settings.last_module) {
+    baudrate = APP_BAUDRATE;
   }
 
-  memcpy_P(&def_module, &kModules[Settings.module], sizeof(def_module));
-  strlcpy(my_module.name, def_module.name, sizeof(my_module.name));
-  for (byte i = 0; i < MAX_GPIO_PIN; i++) {
-    if (Settings.my_gp.io[i] > GPIO_NONE) {
-      my_module.gp.io[i] = Settings.my_gp.io[i];
-    }
-    if ((def_module.gp.io[i] > GPIO_NONE) && (def_module.gp.io[i] < GPIO_USER)) {
-      my_module.gp.io[i] = def_module.gp.io[i];
+  for (uint32_t i = 0; i < sizeof(Settings.user_template.gp); i++) {
+    if ((Settings.user_template.gp.io[i] >= GPIO_SENSOR_END) && (Settings.user_template.gp.io[i] < GPIO_USER)) {
+      Settings.user_template.gp.io[i] = GPIO_USER;  // Fix not supported sensor ids in template
     }
   }
 
-  for (byte i = 0; i < GPIO_MAX; i++) {
+  myio def_gp;
+  ModuleGpios(&def_gp);
+  for (uint32_t i = 0; i < sizeof(Settings.my_gp); i++) {
+    if ((Settings.my_gp.io[i] >= GPIO_SENSOR_END) && (Settings.my_gp.io[i] < GPIO_USER)) {
+      Settings.my_gp.io[i] = GPIO_NONE;             // Fix not supported sensor ids in module
+    }
+    else if (Settings.my_gp.io[i] > GPIO_NONE) {
+      my_module.io[i] = Settings.my_gp.io[i];       // Set User selected Module sensors
+    }
+    if ((def_gp.io[i] > GPIO_NONE) && (def_gp.io[i] < GPIO_USER)) {
+      my_module.io[i] = def_gp.io[i];               // Force Template override
+    }
+  }
+  if ((Settings.my_adc0 >= ADC0_END) && (Settings.my_adc0 < ADC0_USER)) {
+    Settings.my_adc0 = ADC0_NONE;                   // Fix not supported sensor ids in module
+  }
+  else if (Settings.my_adc0 > ADC0_NONE) {
+    my_adc0 = Settings.my_adc0;                     // Set User selected Module sensors
+  }
+  my_module_flag = ModuleFlag();
+  uint32_t template_adc0 = my_module_flag.data &15;
+  if ((template_adc0 > ADC0_NONE) && (template_adc0 < ADC0_USER)) {
+    my_adc0 = template_adc0;                        // Force Template override
+  }
+
+  for (uint32_t i = 0; i < GPIO_MAX; i++) {
     pin[i] = 99;
   }
-  for (byte i = 0; i < MAX_GPIO_PIN; i++) {
-    mpin = my_module.gp.io[i];
+  for (uint32_t i = 0; i < sizeof(my_module.io); i++) {
+    mpin = ValidPin(i, my_module.io[i]);
 
-//  snprintf_P(log_data, sizeof(log_data), PSTR("DBG: gpio pin %d, mpin %d"), i, mpin);
-//  AddLog(LOG_LEVEL_DEBUG);
+    DEBUG_CORE_LOG(PSTR("INI: gpio pin %d, mpin %d"), i, mpin);
 
     if (mpin) {
-      if ((mpin >= GPIO_REL1_INV) && (mpin < (GPIO_REL1_INV + MAX_RELAYS))) {
+      XdrvMailbox.index = mpin;
+      XdrvMailbox.payload = i;
+
+      if ((mpin >= GPIO_SWT1_NP) && (mpin < (GPIO_SWT1_NP + MAX_SWITCHES))) {
+        SwitchPullupFlag(mpin - GPIO_SWT1_NP);
+        mpin -= (GPIO_SWT1_NP - GPIO_SWT1);
+      }
+      else if ((mpin >= GPIO_KEY1_NP) && (mpin < (GPIO_KEY1_NP + MAX_KEYS))) {
+        ButtonPullupFlag(mpin - GPIO_KEY1_NP);       //  0 .. 3
+        mpin -= (GPIO_KEY1_NP - GPIO_KEY1);
+      }
+      else if ((mpin >= GPIO_KEY1_INV) && (mpin < (GPIO_KEY1_INV + MAX_KEYS))) {
+        ButtonInvertFlag(mpin - GPIO_KEY1_INV);      //  0 .. 3
+        mpin -= (GPIO_KEY1_INV - GPIO_KEY1);
+      }
+      else if ((mpin >= GPIO_KEY1_INV_NP) && (mpin < (GPIO_KEY1_INV_NP + MAX_KEYS))) {
+        ButtonPullupFlag(mpin - GPIO_KEY1_INV_NP);   //  0 .. 3
+        ButtonInvertFlag(mpin - GPIO_KEY1_INV_NP);   //  0 .. 3
+        mpin -= (GPIO_KEY1_INV_NP - GPIO_KEY1);
+      }
+      else if ((mpin >= GPIO_REL1_INV) && (mpin < (GPIO_REL1_INV + MAX_RELAYS))) {
         bitSet(rel_inverted, mpin - GPIO_REL1_INV);
         mpin -= (GPIO_REL1_INV - GPIO_REL1);
       }
@@ -2085,29 +1342,25 @@ void GpioInit()
         bitSet(led_inverted, mpin - GPIO_LED1_INV);
         mpin -= (GPIO_LED1_INV - GPIO_LED1);
       }
+      else if (mpin == GPIO_LEDLNK_INV) {
+        ledlnk_inverted = 1;
+        mpin -= (GPIO_LEDLNK_INV - GPIO_LEDLNK);
+      }
       else if ((mpin >= GPIO_PWM1_INV) && (mpin < (GPIO_PWM1_INV + MAX_PWMS))) {
         bitSet(pwm_inverted, mpin - GPIO_PWM1_INV);
         mpin -= (GPIO_PWM1_INV - GPIO_PWM1);
       }
-#ifdef USE_DHT
-      else if ((mpin >= GPIO_DHT11) && (mpin <= GPIO_SI7021)) {
-        if (DhtSetup(i, mpin)) {
-          dht_flg = 1;
-          mpin = GPIO_DHT11;
-        } else {
-          mpin = 0;
-        }
+      else if (XdrvCall(FUNC_PIN_STATE)) {
+        mpin = XdrvMailbox.index;
       }
-#endif  // USE_DHT
+      else if (XsnsCall(FUNC_PIN_STATE)) {
+        mpin = XdrvMailbox.index;
+      };
     }
-    if (mpin) {
-      pin[mpin] = i;
-    }
+    if (mpin) pin[mpin] = i;
   }
 
-  if (2 == pin[GPIO_TXD]) {
-    Serial.set_tx(2);
-  }
+  if ((2 == pin[GPIO_TXD]) || (H801 == my_module_type)) { Serial.set_tx(2); }
 
   analogWriteRange(Settings.pwm_range);      // Default is 1023 (Arduino.h)
   analogWriteFreq(Settings.pwm_frequency);   // Default is 1000 (core_esp8266_wiring_pwm.c)
@@ -2115,18 +1368,17 @@ void GpioInit()
 #ifdef USE_SPI
   spi_flg = ((((pin[GPIO_SPI_CS] < 99) && (pin[GPIO_SPI_CS] > 14)) || (pin[GPIO_SPI_CS] < 12)) || (((pin[GPIO_SPI_DC] < 99) && (pin[GPIO_SPI_DC] > 14)) || (pin[GPIO_SPI_DC] < 12)));
   if (spi_flg) {
-    for (byte i = 0; i < GPIO_MAX; i++) {
-      if ((pin[i] >= 12) && (pin[i] <=14)) {
-        pin[i] = 99;
-      }
+    for (uint32_t i = 0; i < GPIO_MAX; i++) {
+      if ((pin[i] >= 12) && (pin[i] <=14)) pin[i] = 99;
     }
-    my_module.gp.io[12] = GPIO_SPI_MISO;
+    my_module.io[12] = GPIO_SPI_MISO;
     pin[GPIO_SPI_MISO] = 12;
-    my_module.gp.io[13] = GPIO_SPI_MOSI;
+    my_module.io[13] = GPIO_SPI_MOSI;
     pin[GPIO_SPI_MOSI] = 13;
-    my_module.gp.io[14] = GPIO_SPI_CLK;
+    my_module.io[14] = GPIO_SPI_CLK;
     pin[GPIO_SPI_CLK] = 14;
   }
+  soft_spi_flg = ((pin[GPIO_SSPI_CS] < 99) && (pin[GPIO_SSPI_SCLK] < 99) && ((pin[GPIO_SSPI_MOSI] < 99) || (pin[GPIO_SSPI_MOSI] < 99)));
 #endif  // USE_SPI
 
 #ifdef USE_I2C
@@ -2139,80 +1391,113 @@ void GpioInit()
   devices_present = 1;
 
   light_type = LT_BASIC;                     // Use basic PWM control if SetOption15 = 0
+#ifdef USE_LIGHT
   if (Settings.flag.pwm_control) {
-    for (byte i = 0; i < MAX_PWMS; i++) {
-      if (pin[GPIO_PWM1 +i] < 99) {
-        light_type++;                        // Use Dimmer/Color control for all PWM as SetOption15 = 1
-      }
+    for (uint32_t i = 0; i < MAX_PWMS; i++) {
+      if (pin[GPIO_PWM1 +i] < 99) { light_type++; }  // Use Dimmer/Color control for all PWM as SetOption15 = 1
     }
   }
+#endif  // USE_LIGHT
 
-  if (SONOFF_BRIDGE == Settings.module) {
-    baudrate = 19200;
+  if (XdrvCall(FUNC_MODULE_INIT)) {
+    // Serviced
   }
-
-  if (SONOFF_DUAL == Settings.module) {
+  else if (YTF_IR_BRIDGE == my_module_type) {
+    ClaimSerial();  // Stop serial loopback mode
+  }
+  else if (SONOFF_DUAL == my_module_type) {
+    Settings.flag.mqtt_serial = 0;
     devices_present = 2;
     baudrate = 19200;
   }
-  else if (CH4 == Settings.module) {
+  else if (CH4 == my_module_type) {
+    Settings.flag.mqtt_serial = 0;
     devices_present = 4;
     baudrate = 19200;
   }
-  else if (SONOFF_SC == Settings.module) {
+  else if (SONOFF_SC == my_module_type) {
+    Settings.flag.mqtt_serial = 0;
     devices_present = 0;
     baudrate = 19200;
   }
-  else if (SONOFF_BN == Settings.module) {   // PWM Single color led (White)
+#ifdef USE_LIGHT
+  else if (SONOFF_BN == my_module_type) {   // PWM Single color led (White)
     light_type = LT_PWM1;
   }
-  else if (SONOFF_LED == Settings.module) {  // PWM Dual color led (White warm and cold)
+  else if (SONOFF_LED == my_module_type) {  // PWM Dual color led (White warm and cold)
     light_type = LT_PWM2;
   }
-  else if (AILIGHT == Settings.module) {     // RGBW led
+  else if (AILIGHT == my_module_type) {     // RGBW led
     light_type = LT_RGBW;
   }
-  else if (SONOFF_B1 == Settings.module) {   // RGBWC led
+  else if (SONOFF_B1 == my_module_type) {   // RGBWC led
     light_type = LT_RGBWC;
   }
+#endif  // USE_LIGHT
   else {
-    if (!light_type) {
-      devices_present = 0;
-    }
-    for (byte i = 0; i < MAX_RELAYS; i++) {
+    if (!light_type) { devices_present = 0; }
+    for (uint32_t i = 0; i < MAX_RELAYS; i++) {
       if (pin[GPIO_REL1 +i] < 99) {
         pinMode(pin[GPIO_REL1 +i], OUTPUT);
         devices_present++;
+        if (EXS_RELAY == my_module_type) {
+          digitalWrite(pin[GPIO_REL1 +i], bitRead(rel_inverted, i) ? 1 : 0);
+          if (i &1) { devices_present--; }
+        }
       }
     }
   }
 
-  for (byte i = 0; i < MAX_KEYS; i++) {
-    if (pin[GPIO_KEY1 +i] < 99) {
-      pinMode(pin[GPIO_KEY1 +i], (16 == pin[GPIO_KEY1 +i]) ? INPUT_PULLDOWN_16 : INPUT_PULLUP);
-    }
-  }
-  for (byte i = 0; i < MAX_LEDS; i++) {
+  for (uint32_t i = 0; i < MAX_LEDS; i++) {
     if (pin[GPIO_LED1 +i] < 99) {
-      pinMode(pin[GPIO_LED1 +i], OUTPUT);
-      digitalWrite(pin[GPIO_LED1 +i], bitRead(led_inverted, i));
+#ifdef USE_ARILUX_RF
+      if ((3 == i) && (leds_present < 2) && (99 == pin[GPIO_ARIRFSEL])) {
+        pin[GPIO_ARIRFSEL] = pin[GPIO_LED4];  // Legacy support where LED4 was Arilux RF enable
+        pin[GPIO_LED4] = 99;
+      } else {
+#endif
+        pinMode(pin[GPIO_LED1 +i], OUTPUT);
+        leds_present++;
+        digitalWrite(pin[GPIO_LED1 +i], bitRead(led_inverted, i));
+#ifdef USE_ARILUX_RF
+      }
+#endif
     }
   }
-  for (byte i = 0; i < MAX_SWITCHES; i++) {
-    if (pin[GPIO_SWT1 +i] < 99) {
-      pinMode(pin[GPIO_SWT1 +i], (16 == pin[GPIO_SWT1 +i]) ? INPUT_PULLDOWN_16 :INPUT_PULLUP);
-      lastwallswitch[i] = digitalRead(pin[GPIO_SWT1 +i]);  // set global now so doesn't change the saved power state on first switch check
-    }
+  if (pin[GPIO_LEDLNK] < 99) {
+    pinMode(pin[GPIO_LEDLNK], OUTPUT);
+    digitalWrite(pin[GPIO_LEDLNK], ledlnk_inverted);
   }
 
+  ButtonInit();
+  SwitchInit();
+#ifdef ROTARY_V1
+  RotaryInit();
+#endif
+
+#ifdef USE_LIGHT
 #ifdef USE_WS2812
   if (!light_type && (pin[GPIO_WS2812] < 99)) {  // RGB led
     devices_present++;
     light_type = LT_WS2812;
   }
 #endif  // USE_WS2812
+#ifdef USE_SM16716
+  if (SM16716_ModuleSelected()) {
+    light_type += 3;
+    light_type |= LT_SM16716;
+  }
+#endif  // USE_SM16716
+
+  // post-process for lights
+  if (Settings.flag3.pwm_multi_channels) {
+    uint32_t pwm_channels = (light_type & 7) > LST_MAX ? LST_MAX : (light_type & 7);
+    if (0 == pwm_channels) { pwm_channels = 1; }
+    devices_present += pwm_channels - 1;  // add the pwm channels controls at the end
+  }
+#endif  // USE_LIGHT
   if (!light_type) {
-    for (byte i = 0; i < MAX_PWMS; i++) {     // Basic PWM control only
+    for (uint32_t i = 0; i < MAX_PWMS; i++) {     // Basic PWM control only
       if (pin[GPIO_PWM1 +i] < 99) {
         pwm_present = true;
         pinMode(pin[GPIO_PWM1 +i], OUTPUT);
@@ -2221,152 +1506,235 @@ void GpioInit()
     }
   }
 
-  if (EXS_RELAY == Settings.module) {
-    SetLatchingRelay(0,2);
-    SetLatchingRelay(1,2);
-  }
   SetLedPower(Settings.ledstate &8);
+  SetLedLink(Settings.ledstate &8);
 
-  XdrvCall(FUNC_INIT);
+  XdrvCall(FUNC_PRE_INIT);
 }
 
 extern "C" {
 extern struct rst_info resetInfo;
 }
 
-void setup()
+void setup(void)
 {
-  byte idx;
+  global_state.data = 3;  // Init global state (wifi_down, mqtt_down) to solve possible network issues
+
+  RtcRebootLoad();
+  if (!RtcRebootValid()) { RtcReboot.fast_reboot_count = 0; }
+  RtcReboot.fast_reboot_count++;
+  RtcRebootSave();
 
   Serial.begin(baudrate);
   delay(10);
   Serial.println();
   seriallog_level = LOG_LEVEL_INFO;  // Allow specific serial messages until config loaded
 
-  snprintf_P(my_version, sizeof(my_version), PSTR("%d.%d.%d"), VERSION >> 24 & 0xff, VERSION >> 16 & 0xff, VERSION >> 8 & 0xff);
-  if (VERSION & 0x1f) {
-    idx = strlen(my_version);
-    my_version[idx] = 96 + (VERSION & 0x1f);
-    my_version[idx +1] = 0;
+  snprintf_P(my_version, sizeof(my_version), PSTR("%d.%d.%d"), VERSION >> 24 & 0xff, VERSION >> 16 & 0xff, VERSION >> 8 & 0xff);  // Release version 6.3.0
+  if (VERSION & 0xff) {  // Development or patched version 6.3.0.10
+    snprintf_P(my_version, sizeof(my_version), PSTR("%s.%d"), my_version, VERSION & 0xff);
   }
-#ifdef BE_MINIMAL
-  snprintf_P(my_version, sizeof(my_version), PSTR("%s-" D_JSON_MINIMAL), my_version);
-#endif  // BE_MINIMAL
+  char code_image[20];
+  snprintf_P(my_image, sizeof(my_image), PSTR("(%s)"), GetTextIndexed(code_image, sizeof(code_image), CODE_IMAGE, kCodeImage));
 
   SettingsLoad();
   SettingsDelta();
 
   OsWatchInit();
 
+  GetFeatures();
+
+  if (1 == RtcReboot.fast_reboot_count) {  // Allow setting override only when all is well
+    XdrvCall(FUNC_SETTINGS_OVERRIDE);
+  }
+
+  baudrate = Settings.baudrate * 300;
+//  mdns_delayed_start = Settings.param[P_MDNS_DELAYED_START];
   seriallog_level = Settings.seriallog_level;
   seriallog_timer = SERIALLOG_TIMER;
-#ifndef USE_EMULATION
-  Settings.flag2.emulation = 0;
-#endif  // USE_EMULATION
-  syslog_level = (Settings.flag2.emulation) ? 0 : Settings.syslog_level;
+  syslog_level = Settings.syslog_level;
   stop_flash_rotate = Settings.flag.stop_flash_rotate;
   save_data_counter = Settings.save_data;
   sleep = Settings.sleep;
+#ifndef USE_EMULATION
+  Settings.flag2.emulation = 0;
+#else
+#ifndef USE_EMULATION_WEMO
+  if (EMUL_WEMO == Settings.flag2.emulation) { Settings.flag2.emulation = 0; }
+#endif
+#ifndef USE_EMULATION_HUE
+  if (EMUL_HUE == Settings.flag2.emulation) { Settings.flag2.emulation = 0; }
+#endif
+#endif  // USE_EMULATION
 
-  Settings.bootcount++;
-  snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_APPLICATION D_BOOT_COUNT " %d"), Settings.bootcount);
-  AddLog(LOG_LEVEL_DEBUG);
+  if (Settings.param[P_BOOT_LOOP_OFFSET]) {
+    // Disable functionality as possible cause of fast restart within BOOT_LOOP_TIME seconds (Exception, WDT or restarts)
+    if (RtcReboot.fast_reboot_count > Settings.param[P_BOOT_LOOP_OFFSET]) {       // Restart twice
+      Settings.flag3.user_esp8285_enable = 0;       // Disable ESP8285 Generic GPIOs interfering with flash SPI
+      if (RtcReboot.fast_reboot_count > Settings.param[P_BOOT_LOOP_OFFSET] +1) {  // Restart 3 times
+        for (uint32_t i = 0; i < MAX_RULE_SETS; i++) {
+          if (bitRead(Settings.rule_stop, i)) {
+            bitWrite(Settings.rule_enabled, i, 0);  // Disable rules causing boot loop
+          }
+        }
+      }
+      if (RtcReboot.fast_reboot_count > Settings.param[P_BOOT_LOOP_OFFSET] +2) {  // Restarted 4 times
+        Settings.rule_enabled = 0;                  // Disable all rules
+      }
+      if (RtcReboot.fast_reboot_count > Settings.param[P_BOOT_LOOP_OFFSET] +3) {  // Restarted 5 times
+        for (uint32_t i = 0; i < sizeof(Settings.my_gp); i++) {
+          Settings.my_gp.io[i] = GPIO_NONE;         // Reset user defined GPIO disabling sensors
+        }
+        Settings.my_adc0 = ADC0_NONE;               // Reset user defined ADC0 disabling sensors
+      }
+      if (RtcReboot.fast_reboot_count > Settings.param[P_BOOT_LOOP_OFFSET] +4) {  // Restarted 6 times
+        Settings.module = SONOFF_BASIC;             // Reset module to Sonoff Basic
+  //      Settings.last_module = SONOFF_BASIC;
+      }
+      AddLog_P2(LOG_LEVEL_DEBUG, PSTR(D_LOG_APPLICATION D_LOG_SOME_SETTINGS_RESET " (%d)"), RtcReboot.fast_reboot_count);
+    }
+  }
 
-  GpioInit();
-
-  SetSerialBaudrate(baudrate);
-
-  GetMqttClient(mqtt_client, Settings.mqtt_client, sizeof(mqtt_client));
-  GetMqttClient(mqtt_topic, Settings.mqtt_topic, sizeof(mqtt_topic));
-
-  if (strstr(Settings.hostname, "%")) {
+  Format(mqtt_client, Settings.mqtt_client, sizeof(mqtt_client));
+  Format(mqtt_topic, Settings.mqtt_topic, sizeof(mqtt_topic));
+  if (strstr(Settings.hostname, "%") != nullptr) {
     strlcpy(Settings.hostname, WIFI_HOSTNAME, sizeof(Settings.hostname));
     snprintf_P(my_hostname, sizeof(my_hostname)-1, Settings.hostname, mqtt_topic, ESP.getChipId() & 0x1FFF);
   } else {
     snprintf_P(my_hostname, sizeof(my_hostname)-1, Settings.hostname);
   }
+
+  GpioInit();
+
+  SetSerialBaudrate(baudrate);
+
   WifiConnect();
 
-  if (MOTOR == Settings.module) {
-    Settings.poweronstate = POWER_ALL_ON;  // Needs always on else in limbo!
-  }
+  if (MOTOR == my_module_type) { Settings.poweronstate = POWER_ALL_ON; }  // Needs always on else in limbo!
   if (POWER_ALL_ALWAYS_ON == Settings.poweronstate) {
-    SetDevicePower(1);
+    SetDevicePower(1, SRC_RESTART);
   } else {
     if ((resetInfo.reason == REASON_DEFAULT_RST) || (resetInfo.reason == REASON_EXT_SYS_RST)) {
       switch (Settings.poweronstate) {
       case POWER_ALL_OFF:
       case POWER_ALL_OFF_PULSETIME_ON:
         power = 0;
-        SetDevicePower(power);
+        SetDevicePower(power, SRC_RESTART);
         break;
       case POWER_ALL_ON:  // All on
         power = (1 << devices_present) -1;
-        SetDevicePower(power);
+        SetDevicePower(power, SRC_RESTART);
         break;
       case POWER_ALL_SAVED_TOGGLE:
         power = (Settings.power & ((1 << devices_present) -1)) ^ POWER_MASK;
         if (Settings.flag.save_state) {
-          SetDevicePower(power);
+          SetDevicePower(power, SRC_RESTART);
         }
         break;
       case POWER_ALL_SAVED:
         power = Settings.power & ((1 << devices_present) -1);
         if (Settings.flag.save_state) {
-          SetDevicePower(power);
+          SetDevicePower(power, SRC_RESTART);
         }
         break;
       }
     } else {
       power = Settings.power & ((1 << devices_present) -1);
       if (Settings.flag.save_state) {
-        SetDevicePower(power);
+        SetDevicePower(power, SRC_RESTART);
       }
     }
   }
 
   // Issue #526 and #909
-  for (byte i = 0; i < devices_present; i++) {
-    if ((i < MAX_RELAYS) && (pin[GPIO_REL1 +i] < 99)) {
-      bitWrite(power, i, digitalRead(pin[GPIO_REL1 +i]) ^ bitRead(rel_inverted, i));
+  for (uint32_t i = 0; i < devices_present; i++) {
+    if (!Settings.flag3.no_power_feedback) {  // #5594 and #5663
+      if ((i < MAX_RELAYS) && (pin[GPIO_REL1 +i] < 99)) {
+        bitWrite(power, i, digitalRead(pin[GPIO_REL1 +i]) ^ bitRead(rel_inverted, i));
+      }
     }
     if ((i < MAX_PULSETIMERS) && (bitRead(power, i) || (POWER_ALL_OFF_PULSETIME_ON == Settings.poweronstate))) {
-      pulse_timer[i] = Settings.pulse_timer[i];
+      SetPulseTimer(i, Settings.pulse_timer[i]);
     }
   }
-
   blink_powersave = power;
 
-  snprintf_P(log_data, sizeof(log_data), PSTR(D_PROJECT " %s %s (" D_CMND_TOPIC " %s, " D_FALLBACK " %s, " D_CMND_GROUPTOPIC " %s) " D_VERSION " %s-" ARDUINO_ESP8266_RELEASE),
-    PROJECT, Settings.friendlyname[0], mqtt_topic, mqtt_client, Settings.mqtt_grptopic, my_version);
-  AddLog(LOG_LEVEL_INFO);
-#ifdef BE_MINIMAL
-  snprintf_P(log_data, sizeof(log_data), PSTR(D_WARNING_MINIMAL_VERSION));
-  AddLog(LOG_LEVEL_INFO);
-#endif  // BE_MINIMAL
+  AddLog_P2(LOG_LEVEL_INFO, PSTR(D_PROJECT " %s %s " D_VERSION " %s%s-" ARDUINO_ESP8266_RELEASE), PROJECT, Settings.friendlyname[0], my_version, my_image);
+#ifdef FIRMWARE_MINIMAL
+  AddLog_P2(LOG_LEVEL_INFO, PSTR(D_WARNING_MINIMAL_VERSION));
+#endif  // FIRMWARE_MINIMAL
 
   RtcInit();
+
+#ifdef USE_ARDUINO_OTA
+  ArduinoOTAInit();
+#endif  // USE_ARDUINO_OTA
+
+  XdrvCall(FUNC_INIT);
   XsnsCall(FUNC_INIT);
 }
 
-void loop()
+void loop(void)
 {
+  uint32_t my_sleep = millis();
+
   XdrvCall(FUNC_LOOP);
+  XsnsCall(FUNC_LOOP);
 
   OsWatchLoop();
 
-#ifdef USE_WEBSERVER
-  PollDnsWebserver();
-#endif  // USE_WEBSERVER
+  ButtonLoop();
+  SwitchLoop();
+#ifdef ROTARY_V1
+  RotaryLoop();
+#endif
 
-#ifdef USE_EMULATION
-  if (Settings.flag2.emulation) PollUdp();
-#endif  // USE_EMULATION
+  if (TimeReached(state_50msecond)) {
+    SetNextTimeInterval(state_50msecond, 50);
+    XdrvCall(FUNC_EVERY_50_MSECOND);
+    XsnsCall(FUNC_EVERY_50_MSECOND);
+  }
+  if (TimeReached(state_100msecond)) {
+    SetNextTimeInterval(state_100msecond, 100);
+    Every100mSeconds();
+    XdrvCall(FUNC_EVERY_100_MSECOND);
+    XsnsCall(FUNC_EVERY_100_MSECOND);
+  }
+  if (TimeReached(state_250msecond)) {
+    SetNextTimeInterval(state_250msecond, 250);
+    Every250mSeconds();
+    XdrvCall(FUNC_EVERY_250_MSECOND);
+    XsnsCall(FUNC_EVERY_250_MSECOND);
+  }
 
-  if (millis() >= state_loop_timer) StateLoop();
+  if (!serial_local) { SerialInput(); }
 
-  if (Serial.available()) SerialInput();
+#ifdef USE_ARDUINO_OTA
+  MDNS.update();
+  ArduinoOTA.handle();
+  // Once OTA is triggered, only handle that and dont do other stuff. (otherwise it fails)
+  while (arduino_ota_triggered) ArduinoOTA.handle();
+#endif  // USE_ARDUINO_OTA
 
-//  yield();     // yield == delay(0), delay contains yield, auto yield in loop
-  delay(sleep);  // https://github.com/esp8266/Arduino/issues/2021
+  uint32_t my_activity = millis() - my_sleep;
+
+  if (Settings.flag3.sleep_normal) {
+    //  yield();       // yield == delay(0), delay contains yield, auto yield in loop
+    delay(sleep);  // https://github.com/esp8266/Arduino/issues/2021
+  } else {
+    if (my_activity < (uint32_t)sleep) {
+      delay((uint32_t)sleep - my_activity);  // Provide time for background tasks like wifi
+    } else {
+      if (global_state.wifi_down) {
+        delay(my_activity /2); // If wifi down and my_activity > setoption36 then force loop delay to 1/3 of my_activity period
+      }
+    }
+  }
+
+  if (!my_activity) { my_activity++; }            // We cannot divide by 0
+  uint32_t loop_delay = sleep;
+  if (!loop_delay) { loop_delay++; }              // We cannot divide by 0
+  uint32_t loops_per_second = 1000 / loop_delay;  // We need to keep track of this many loops per second
+  uint32_t this_cycle_ratio = 100 * my_activity / loop_delay;
+  loop_load_avg = loop_load_avg - (loop_load_avg / loops_per_second) + (this_cycle_ratio / loops_per_second); // Take away one loop average away and add the new one
 }

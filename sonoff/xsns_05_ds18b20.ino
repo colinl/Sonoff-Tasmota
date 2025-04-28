@@ -1,7 +1,7 @@
 /*
   xsns_05_ds18b20.ino - DS18B20 temperature sensor support for Sonoff-Tasmota
 
-  Copyright (C) 2018  Theo Arends
+  Copyright (C) 2019  Theo Arends
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,24 +22,31 @@
  * DS18B20 - Temperature - Single sensor
 \*********************************************************************************************/
 
+#define XSNS_05              5
+
 #define W1_SKIP_ROM          0xCC
 #define W1_CONVERT_TEMP      0x44
 #define W1_READ_SCRATCHPAD   0xBE
 
-float ds18b20_last_temperature = 0;
-uint16_t ds18b20_last_result = 0;
+float ds18b20_temperature = 0;
+uint8_t ds18b20_valid = 0;
 uint8_t ds18x20_pin = 0;
+char ds18b20_types[] = "DS18B20";
 
 /*********************************************************************************************\
  * Embedded stripped and tuned OneWire library
 \*********************************************************************************************/
 
-uint8_t OneWireReset()
+uint8_t OneWireReset(void)
 {
   uint8_t retries = 125;
 
   //noInterrupts();
+#ifdef DS18B20_INTERNAL_PULLUP
+  pinMode(ds18x20_pin, INPUT_PULLUP);
+#else
   pinMode(ds18x20_pin, INPUT);
+#endif
   do {
     if (--retries == 0) {
       return 0;
@@ -49,7 +56,11 @@ uint8_t OneWireReset()
   pinMode(ds18x20_pin, OUTPUT);
   digitalWrite(ds18x20_pin, LOW);
   delayMicroseconds(480);
+#ifdef DS18B20_INTERNAL_PULLUP
+  pinMode(ds18x20_pin, INPUT_PULLUP);
+#else
   pinMode(ds18x20_pin, INPUT);
+#endif
   delayMicroseconds(70);
   uint8_t r = !digitalRead(ds18x20_pin);
   //interrupts();
@@ -72,13 +83,17 @@ void OneWireWriteBit(uint8_t v)
   delayMicroseconds(delay_high[v]);
 }
 
-uint8_t OneWireReadBit()
+uint8_t OneWireReadBit(void)
 {
   //noInterrupts();
   pinMode(ds18x20_pin, OUTPUT);
   digitalWrite(ds18x20_pin, LOW);
   delayMicroseconds(3);
+#ifdef DS18B20_INTERNAL_PULLUP
+  pinMode(ds18x20_pin, INPUT_PULLUP);
+#else
   pinMode(ds18x20_pin, INPUT);
+#endif
   delayMicroseconds(10);
   uint8_t r = digitalRead(ds18x20_pin);
   //interrupts();
@@ -93,7 +108,7 @@ void OneWireWrite(uint8_t v)
   }
 }
 
-uint8_t OneWireRead()
+uint8_t OneWireRead(void)
 {
   uint8_t r = 0;
 
@@ -105,14 +120,14 @@ uint8_t OneWireRead()
   return r;
 }
 
-boolean OneWireCrc8(uint8_t *addr)
+bool OneWireCrc8(uint8_t *addr)
 {
   uint8_t crc = 0;
   uint8_t len = 8;
 
   while (len--) {
     uint8_t inbyte = *addr++;          // from 0 to 7
-    for (uint8_t i = 8; i; i--) {
+    for (uint32_t i = 8; i; i--) {
       uint8_t mix = (crc ^ inbyte) & 0x01;
       crc >>= 1;
       if (mix) {
@@ -126,12 +141,7 @@ boolean OneWireCrc8(uint8_t *addr)
 
 /********************************************************************************************/
 
-void Ds18x20Init()
-{
-  ds18x20_pin = pin[GPIO_DSB];
-}
-
-void Ds18x20Convert()
+void Ds18b20Convert(void)
 {
   OneWireReset();
   OneWireWrite(W1_SKIP_ROM);           // Address all Sensors on Bus
@@ -139,32 +149,23 @@ void Ds18x20Convert()
 //  delay(750);                          // 750ms should be enough for 12bit conv
 }
 
-boolean Ds18b20Read(float &t)
+bool Ds18b20Read(void)
 {
   uint8_t data[9];
   int8_t sign = 1;
 
-  if (!ds18b20_last_temperature) {
-    t = NAN;
-  } else {
-    ds18b20_last_result++;
-    if (ds18b20_last_result > 4) {     // Reset after 4 misses
-      ds18b20_last_temperature = NAN;
-    }
-    t = ds18b20_last_temperature;
-  }
-
+  if (ds18b20_valid) { ds18b20_valid--; }
 /*
-  if (!OneWireReadBit()) {             //check measurement end
+  if (!OneWireReadBit()) {     // Check end of measurement
     AddLog_P(LOG_LEVEL_DEBUG, PSTR(D_LOG_DSB D_SENSOR_BUSY));
-    return !isnan(t);
+    return;
   }
 */
-  for (uint8_t retry = 0; retry < 3; retry++) {
+  for (uint32_t retry = 0; retry < 3; retry++) {
     OneWireReset();
     OneWireWrite(W1_SKIP_ROM);
     OneWireWrite(W1_READ_SCRATCHPAD);
-    for (uint8_t i = 0; i < 9; i++) {
+    for (uint32_t i = 0; i < 9; i++) {
       data[i] = OneWireRead();
     }
     if (OneWireCrc8(data)) {
@@ -173,35 +174,51 @@ boolean Ds18b20Read(float &t)
         temp12 = (~temp12) +1;
         sign = -1;
       }
-      t = ConvertTemp(sign * temp12 * 0.0625);
-      ds18b20_last_result = 0;
-    }
-    if (!isnan(t)) {
-      ds18b20_last_temperature = t;
+      ds18b20_temperature = ConvertTemp(sign * temp12 * 0.0625);
+      ds18b20_valid = SENSOR_MAX_MISS;
       return true;
     }
   }
   AddLog_P(LOG_LEVEL_DEBUG, PSTR(D_LOG_DSB D_SENSOR_CRC_ERROR));
-  return !isnan(t);
+  return false;
 }
 
-void Ds18b20Show(boolean json)
+/********************************************************************************************/
+
+void Ds18b20EverySecond(void)
 {
-  float t;
+  ds18x20_pin = pin[GPIO_DSB];
+  if (uptime &1) {
+    // 2mS
+    Ds18b20Convert();          // Start conversion, takes up to one second
+  } else {
+    // 12mS
+    if (!Ds18b20Read()) {      // Read temperature
+      AddLogMissed(ds18b20_types, ds18b20_valid);
+    }
+  }
+}
 
-  if (Ds18b20Read(t)) {                // Check if read failed
-    char temperature[10];
-
-    dtostrfd(t, Settings.flag2.temperature_resolution, temperature);
-
+void Ds18b20Show(bool json)
+{
+  if (ds18b20_valid) {        // Check for valid temperature
+    char temperature[33];
+    dtostrfd(ds18b20_temperature, Settings.flag2.temperature_resolution, temperature);
     if(json) {
-      snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s,\"DS18B20\":{\"" D_JSON_TEMPERATURE "\":%s}"), mqtt_data, temperature);
+      ResponseAppend_P(JSON_SNS_TEMP, ds18b20_types, temperature);
 #ifdef USE_DOMOTICZ
-      DomoticzSensor(DZ_TEMP, temperature);
+      if (0 == tele_period) {
+        DomoticzSensor(DZ_TEMP, temperature);
+      }
 #endif  // USE_DOMOTICZ
+#ifdef USE_KNX
+      if (0 == tele_period) {
+        KnxSensor(KNX_TEMPERATURE, ds18b20_temperature);
+      }
+#endif  // USE_KNX
 #ifdef USE_WEBSERVER
     } else {
-      snprintf_P(mqtt_data, sizeof(mqtt_data), HTTP_SNS_TEMP, mqtt_data, "DS18B20", temperature, TempUnit());
+      WSContentSend_PD(HTTP_SNS_TEMP, ds18b20_types, temperature, TempUnit());
 #endif  // USE_WEBSERVER
     }
   }
@@ -211,27 +228,21 @@ void Ds18b20Show(boolean json)
  * Interface
 \*********************************************************************************************/
 
-#define XSNS_05
-
-boolean Xsns05(byte function)
+bool Xsns05(uint8_t function)
 {
-  boolean result = false;
+  bool result = false;
 
   if (pin[GPIO_DSB] < 99) {
     switch (function) {
-      case FUNC_INIT:
-        Ds18x20Init();
-        break;
-      case FUNC_PREP_BEFORE_TELEPERIOD:
-        Ds18x20Convert();   // Start conversion, takes up to one second
+      case FUNC_EVERY_SECOND:
+        Ds18b20EverySecond();
         break;
       case FUNC_JSON_APPEND:
         Ds18b20Show(1);
         break;
 #ifdef USE_WEBSERVER
-      case FUNC_WEB_APPEND:
+      case FUNC_WEB_SENSOR:
         Ds18b20Show(0);
-        Ds18x20Convert();   // Start conversion, takes up to one second
         break;
 #endif  // USE_WEBSERVER
     }

@@ -1,7 +1,7 @@
 /*
   support.ino - support for Sonoff-Tasmota
 
-  Copyright (C) 2018  Theo Arends
+  Copyright (C) 2019  Theo Arends
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -24,25 +24,30 @@ uint32_t syslog_host_hash = 0;   // Syslog host name hash
  * Watchdog extension (https://github.com/esp8266/Arduino/issues/1532)
 \*********************************************************************************************/
 
+#include <Ticker.h>
+
 Ticker tickerOSWatch;
 
-#define OSWATCH_RESET_TIME 120
+const uint32_t OSWATCH_RESET_TIME = 120;
 
 static unsigned long oswatch_last_loop_time;
-byte oswatch_blocked_loop = 0;
+uint8_t oswatch_blocked_loop = 0;
 
 #ifndef USE_WS2812_DMA  // Collides with Neopixelbus but solves exception
 //void OsWatchTicker() ICACHE_RAM_ATTR;
 #endif  // USE_WS2812_DMA
 
-void OsWatchTicker()
+#ifdef USE_KNX
+bool knx_started = false;
+#endif  // USE_KNX
+
+void OsWatchTicker(void)
 {
-  unsigned long t = millis();
-  unsigned long last_run = abs(t - oswatch_last_loop_time);
+  uint32_t t = millis();
+  uint32_t last_run = abs(t - oswatch_last_loop_time);
 
 #ifdef DEBUG_THEO
-  snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_APPLICATION D_OSWATCH " FreeRam %d, rssi %d, last_run %d"), ESP.getFreeHeap(), WifiGetRssiAsQuality(WiFi.RSSI()), last_run);
-  AddLog(LOG_LEVEL_DEBUG);
+  AddLog_P2(LOG_LEVEL_DEBUG, PSTR(D_LOG_APPLICATION D_OSWATCH " FreeRam %d, rssi %d, last_run %d"), ESP.getFreeHeap(), WifiGetRssiAsQuality(WiFi.RSSI()), last_run);
 #endif  // DEBUG_THEO
   if (last_run >= (OSWATCH_RESET_TIME * 1000)) {
 //    AddLog_P(LOG_LEVEL_INFO, PSTR(D_LOG_APPLICATION D_OSWATCH " " D_BLOCKED_LOOP ". " D_RESTARTING));  // Save iram space
@@ -53,7 +58,7 @@ void OsWatchTicker()
   }
 }
 
-void OsWatchInit()
+void OsWatchInit(void)
 {
   oswatch_blocked_loop = RtcSettings.oswatch_blocked_loop;
   RtcSettings.oswatch_blocked_loop = 0;
@@ -61,13 +66,13 @@ void OsWatchInit()
   tickerOSWatch.attach_ms(((OSWATCH_RESET_TIME / 3) * 1000), OsWatchTicker);
 }
 
-void OsWatchLoop()
+void OsWatchLoop(void)
 {
   oswatch_last_loop_time = millis();
 //  while(1) delay(1000);  // this will trigger the os watch
 }
 
-String GetResetReason()
+String GetResetReason(void)
 {
   char buff[32];
   if (oswatch_blocked_loop) {
@@ -78,72 +83,10 @@ String GetResetReason()
   }
 }
 
-#ifdef DEBUG_THEO
-void ExceptionTest(byte type)
+bool OsWatchBlockedLoop(void)
 {
-/*
-Exception (28):
-epc1=0x4000bf64 epc2=0x00000000 epc3=0x00000000 excvaddr=0x00000007 depc=0x00000000
-
-ctx: cont
-sp: 3fff1f30 end: 3fff2840 offset: 01a0
-
->>>stack>>>
-3fff20d0:  202c3573 756f7247 2c302070 646e4920
-3fff20e0:  40236a6e 7954202c 45206570 00454358
-3fff20f0:  00000010 00000007 00000000 3fff2180
-3fff2100:  3fff2190 40107bfc 3fff3e4c 3fff22c0
-3fff2110:  40261934 000000f0 3fff22c0 401004d8
-3fff2120:  40238fcf 00000050 3fff2100 4021fc10
-3fff2130:  3fff32bc 4021680c 3ffeade1 4021ff7d
-3fff2140:  3fff2190 3fff2180 0000000c 7fffffff
-3fff2150:  00000019 00000000 00000000 3fff21c0
-3fff2160:  3fff23f3 3ffe8e08 00000000 4021ffb4
-3fff2170:  3fff2190 3fff2180 0000000c 40201118
-3fff2180:  3fff21c0 0000003c 3ffef840 00000007
-3fff2190:  00000000 00000000 00000000 40201128
-3fff21a0:  3fff23f3 000000f1 3fff23ec 4020fafb
-3fff21b0:  3fff23f3 3fff21c0 3fff21d0 3fff23f6
-3fff21c0:  00000000 3fff23fb 4022321b 00000000
-
-Exception 28: LoadProhibited: A load referenced a page mapped with an attribute that does not permit loads
-Decoding 14 results
-0x40236a6e: ets_vsnprintf at ?? line ?
-0x40107bfc: vsnprintf at C:\Data2\Arduino\arduino-1.8.1-esp-2.3.0\portable\packages\esp8266\hardware\esp8266\2.3.0\cores\esp8266/libc_replacements.c line 387
-0x40261934: bignum_exptmod at ?? line ?
-0x401004d8: malloc at C:\Data2\Arduino\arduino-1.8.1-esp-2.3.0\portable\packages\esp8266\hardware\esp8266\2.3.0\cores\esp8266\umm_malloc/umm_malloc.c line 1664
-0x40238fcf: wifi_station_get_connect_status at ?? line ?
-0x4021fc10: operator new[](unsigned int) at C:\Data2\Arduino\arduino-1.8.1-esp-2.3.0\portable\packages\esp8266\hardware\esp8266\2.3.0\cores\esp8266/abi.cpp line 57
-0x4021680c: ESP8266WiFiSTAClass::status() at C:\Data2\Arduino\arduino-1.8.1-esp-2.3.0\portable\packages\esp8266\hardware\esp8266\2.3.0\libraries\ESP8266WiFi\src/ESP8266WiFiSTA.cpp line 569
-0x4021ff7d: vsnprintf_P(char*, unsigned int, char const*, __va_list_tag) at C:\Data2\Arduino\arduino-1.8.1-esp-2.3.0\portable\packages\esp8266\hardware\esp8266\2.3.0\cores\esp8266/pgmspace.cpp line 146
-0x4021ffb4: snprintf_P(char*, unsigned int, char const*, ...) at C:\Data2\Arduino\arduino-1.8.1-esp-2.3.0\portable\packages\esp8266\hardware\esp8266\2.3.0\cores\esp8266/pgmspace.cpp line 146
-0x40201118: atol at C:\Data2\Arduino\arduino-1.8.1-esp-2.3.0\portable\packages\esp8266\hardware\esp8266\2.3.0\cores\esp8266/core_esp8266_noniso.c line 45
-0x40201128: atoi at C:\Data2\Arduino\arduino-1.8.1-esp-2.3.0\portable\packages\esp8266\hardware\esp8266\2.3.0\cores\esp8266/core_esp8266_noniso.c line 45
-0x4020fafb: MqttDataCallback(char*, unsigned char*, unsigned int) at R:\Arduino\Work-ESP8266\Theo\sonoff\sonoff-4\sonoff/sonoff.ino line 679 (discriminator 1)
-0x4022321b: pp_attach at ?? line ?
-
-00:00:08 MQTT: tele/sonoff/INFO3 = {"Started":"Fatal exception:28 flag:2 (EXCEPTION) epc1:0x4000bf64 epc2:0x00000000 epc3:0x00000000 excvaddr:0x00000007 depc:0x00000000"}
-*/
-  if (1 == type) {
-    char svalue[10];
-    snprintf_P(svalue, sizeof(svalue), PSTR("%s"), 7);  // Exception 28 as number in string (7 in excvaddr)
-  }
-/*
-14:50:52 osWatch: FreeRam 25896, rssi 68, last_run 0
-14:51:02 osWatch: FreeRam 25896, rssi 58, last_run 0
-14:51:03 CMND: exception 2
-14:51:12 osWatch: FreeRam 25360, rssi 60, last_run 8771
-14:51:22 osWatch: FreeRam 25360, rssi 62, last_run 18771
-14:51:32 osWatch: FreeRam 25360, rssi 62, last_run 28771
-14:51:42 osWatch: FreeRam 25360, rssi 62, last_run 38771
-14:51:42 osWatch: Warning, loop blocked. Restart now
-*/
-  if (2 == type) {
-    while(1) delay(1000);  // this will trigger the os watch
-  }
+  return oswatch_blocked_loop;
 }
-#endif  // DEBUG_THEO
-
 /*********************************************************************************************\
  * Miscellaneous
 \*********************************************************************************************/
@@ -165,7 +108,7 @@ void* memchr(const void* ptr, int value, size_t num)
   return 0;
 }
 
-// http://clc-wiki.net/wiki/C_standard_library:string.h:strspn
+// http://clc-wiki.net/wiki/C_standard_library:string.h:strcspn
 // Get span until any character in string
 size_t strcspn(const char *str1, const char *str2)
 {
@@ -180,6 +123,89 @@ size_t strcspn(const char *str1, const char *str2)
   }
   return ret;
 }
+
+// https://clc-wiki.net/wiki/C_standard_library:string.h:strpbrk
+// Locate the first occurrence in the string pointed to by s1 of any character from the string pointed to by s2
+char* strpbrk(const char *s1, const char *s2)
+{
+  while(*s1) {
+    if (strchr(s2, *s1++)) {
+      return (char*)--s1;
+    }
+  }
+  return 0;
+}
+
+// https://opensource.apple.com/source/Libc/Libc-583/stdlib/FreeBSD/strtoull.c
+// Convert a string to an unsigned long long integer
+#ifndef __LONG_LONG_MAX__
+#define __LONG_LONG_MAX__ 9223372036854775807LL
+#endif
+#ifndef ULLONG_MAX
+#define ULLONG_MAX (__LONG_LONG_MAX__ * 2ULL + 1)
+#endif
+
+unsigned long long strtoull(const char *__restrict nptr, char **__restrict endptr, int base)
+{
+  const char *s = nptr;
+  char c;
+  do { c = *s++; } while (isspace((unsigned char)c));                         // Trim leading spaces
+
+  int neg = 0;
+  if (c == '-') {                                                             // Set minus flag and/or skip sign
+    neg = 1;
+    c = *s++;
+  } else {
+    if (c == '+') {
+      c = *s++;
+    }
+  }
+
+  if ((base == 0 || base == 16) && (c == '0') && (*s == 'x' || *s == 'X')) {  // Set Hexadecimal
+    c = s[1];
+    s += 2;
+    base = 16;
+  }
+  if (base == 0) { base = (c == '0') ? 8 : 10; }                              // Set Octal or Decimal
+
+  unsigned long long acc = 0;
+  int any = 0;
+  if (base > 1 && base < 37) {
+    unsigned long long cutoff = ULLONG_MAX / base;
+    int cutlim = ULLONG_MAX % base;
+    for ( ; ; c = *s++) {
+      if (c >= '0' && c <= '9')
+        c -= '0';
+      else if (c >= 'A' && c <= 'Z')
+        c -= 'A' - 10;
+      else if (c >= 'a' && c <= 'z')
+        c -= 'a' - 10;
+      else
+        break;
+
+      if (c >= base)
+        break;
+
+      if (any < 0 || acc > cutoff || (acc == cutoff && c > cutlim))
+        any = -1;
+      else {
+        any = 1;
+        acc *= base;
+        acc += c;
+      }
+    }
+    if (any < 0) {
+      acc = ULLONG_MAX;                                                       // Range error
+    }
+    else if (any && neg) {
+      acc = -acc;
+    }
+  }
+
+  if (endptr != nullptr) { *endptr = (char *)(any ? s - 1 : nptr); }
+
+  return acc;
+}
 #endif  // ARDUINO_ESP8266_RELEASE_2_3_0
 
 // Get span until single character in string
@@ -192,21 +218,334 @@ size_t strchrspn(const char *str1, int character)
   return ret;
 }
 
-char* dtostrfd(double number, unsigned char prec, char *s)
+// Function to return a substring defined by a delimiter at an index
+char* subStr(char* dest, char* str, const char *delim, int index)
 {
-  return dtostrf(number, 1, prec, s);
+  char *act;
+  char *sub = nullptr;
+  char *ptr;
+  int i;
+
+  // Since strtok consumes the first arg, make a copy
+  strncpy(dest, str, strlen(str)+1);
+  for (i = 1, act = dest; i <= index; i++, act = nullptr) {
+    sub = strtok_r(act, delim, &ptr);
+    if (sub == nullptr) break;
+  }
+  sub = Trim(sub);
+  return sub;
 }
 
-boolean ParseIp(uint32_t* addr, const char* str)
+float CharToFloat(const char *str)
+{
+  // simple ascii to double, because atof or strtod are too large
+  char strbuf[24];
+
+  strlcpy(strbuf, str, sizeof(strbuf));
+  char *pt = strbuf;
+  while ((*pt != '\0') && isblank(*pt)) { pt++; }  // Trim leading spaces
+
+  signed char sign = 1;
+  if (*pt == '-') { sign = -1; }
+  if (*pt == '-' || *pt=='+') { pt++; }            // Skip any sign
+
+  float left = 0;
+  if (*pt != '.') {
+    left = atoi(pt);                               // Get left part
+    while (isdigit(*pt)) { pt++; }                 // Skip number
+  }
+
+  float right = 0;
+  if (*pt == '.') {
+    pt++;
+    right = atoi(pt);                              // Decimal part
+    while (isdigit(*pt)) {
+      pt++;
+      right /= 10.0f;
+    }
+  }
+
+  float result = left + right;
+  if (sign < 0) {
+    return -result;                                // Add negative sign
+  }
+  return result;
+}
+
+int TextToInt(char *str)
+{
+  char *p;
+  uint8_t radix = 10;
+  if ('#' == str[0]) {
+    radix = 16;
+    str++;
+  }
+  return strtol(str, &p, radix);
+}
+
+char* ulltoa(unsigned long long value, char *str, int radix)
+{
+  char digits[64];
+  char *dst = str;
+  int i = 0;
+  int n = 0;
+
+//  if (radix < 2 || radix > 36) { radix = 10; }
+
+  do {
+    n = value % radix;
+    digits[i++] = (n < 10) ? (char)n+'0' : (char)n-10+'A';
+    value /= radix;
+  } while (value != 0);
+
+  while (i > 0) { *dst++ = digits[--i]; }
+
+  *dst = 0;
+  return str;
+}
+
+// see https://stackoverflow.com/questions/6357031/how-do-you-convert-a-byte-array-to-a-hexadecimal-string-in-c
+// char* ToHex_P(unsigned char * in, size_t insz, char * out, size_t outsz, char inbetween = '\0'); in sonoff_post.h
+char* ToHex_P(const unsigned char * in, size_t insz, char * out, size_t outsz, char inbetween)
+{
+  // ToHex_P(in, insz, out, outz)      -> "12345667"
+  // ToHex_P(in, insz, out, outz, ' ') -> "12 34 56 67"
+  // ToHex_P(in, insz, out, outz, ':') -> "12:34:56:67"
+  static const char * hex = "0123456789ABCDEF";
+  int between = (inbetween) ? 3 : 2;
+  const unsigned char * pin = in;
+  char * pout = out;
+  for (; pin < in+insz; pout += between, pin++) {
+    pout[0] = hex[(pgm_read_byte(pin)>>4) & 0xF];
+    pout[1] = hex[ pgm_read_byte(pin)     & 0xF];
+    if (inbetween) { pout[2] = inbetween; }
+    if (pout + 3 - out > outsz) { break; }  // Better to truncate output string than overflow buffer
+  }
+  pout[(inbetween && insz) ? -1 : 0] = 0;   // Discard last inbetween if any input
+  return out;
+}
+
+char* Uint64toHex(uint64_t value, char *str, uint16_t bits)
+{
+  ulltoa(value, str, 16);  // Get 64bit value
+
+  int fill = 8;
+  if ((bits > 3) && (bits < 65)) {
+    fill = bits / 4;  // Max 16
+    if (bits % 4) { fill++; }
+  }
+  int len = strlen(str);
+  fill -= len;
+  if (fill > 0) {
+    memmove(str + fill, str, len +1);
+    memset(str, '0', fill);
+  }
+  return str;
+}
+
+char* dtostrfd(double number, unsigned char prec, char *s)
+{
+  if ((isnan(number)) || (isinf(number))) {  // Fix for JSON output (https://stackoverflow.com/questions/1423081/json-left-out-infinity-and-nan-json-status-in-ecmascript)
+    strcpy(s, "null");
+    return s;
+  } else {
+    return dtostrf(number, 1, prec, s);
+  }
+}
+
+char* Unescape(char* buffer, uint32_t* size)
+{
+  uint8_t* read = (uint8_t*)buffer;
+  uint8_t* write = (uint8_t*)buffer;
+  int32_t start_size = *size;
+  int32_t end_size = *size;
+  uint8_t che = 0;
+
+//  AddLogBuffer(LOG_LEVEL_DEBUG, (uint8_t*)buffer, *size);
+
+  while (start_size > 0) {
+    uint8_t ch = *read++;
+    start_size--;
+    if (ch != '\\') {
+      *write++ = ch;
+    } else {
+      if (start_size > 0) {
+        uint8_t chi = *read++;
+        start_size--;
+        end_size--;
+        switch (chi) {
+          case '\\': che = '\\'; break;  // 5C Backslash
+          case 'a': che = '\a'; break;   // 07 Bell (Alert)
+          case 'b': che = '\b'; break;   // 08 Backspace
+          case 'e': che = '\e'; break;   // 1B Escape
+          case 'f': che = '\f'; break;   // 0C Formfeed
+          case 'n': che = '\n'; break;   // 0A Linefeed (Newline)
+          case 'r': che = '\r'; break;   // 0D Carriage return
+          case 's': che = ' ';  break;   // 20 Space
+          case 't': che = '\t'; break;   // 09 Horizontal tab
+          case 'v': che = '\v'; break;   // 0B Vertical tab
+          case 'x': {
+            uint8_t* start = read;
+            che = (uint8_t)strtol((const char*)read, (char**)&read, 16);
+            start_size -= (uint16_t)(read - start);
+            end_size -= (uint16_t)(read - start);
+            break;
+          }
+          case '"': che = '\"'; break;   // 22 Quotation mark
+//          case '?': che = '\?'; break;   // 3F Question mark
+          default : {
+            che = chi;
+            *write++ = ch;
+            end_size++;
+          }
+        }
+        *write++ = che;
+      }
+    }
+  }
+  *size = end_size;
+  *write++ = 0;   // add the end string pointer reference
+//  AddLogBuffer(LOG_LEVEL_DEBUG, (uint8_t*)buffer, *size);
+
+  return buffer;
+}
+
+char* RemoveSpace(char* p)
+{
+  char* write = p;
+  char* read = p;
+  char ch = '.';
+
+  while (ch != '\0') {
+    ch = *read++;
+    if (!isspace(ch)) {
+      *write++ = ch;
+    }
+  }
+//  *write = '\0';  // Removed 20190223 as it buffer overflows on no isspace found - no need either
+  return p;
+}
+
+char* LowerCase(char* dest, const char* source)
+{
+  char* write = dest;
+  const char* read = source;
+  char ch = '.';
+
+  while (ch != '\0') {
+    ch = *read++;
+    *write++ = tolower(ch);
+  }
+  return dest;
+}
+
+char* UpperCase(char* dest, const char* source)
+{
+  char* write = dest;
+  const char* read = source;
+  char ch = '.';
+
+  while (ch != '\0') {
+    ch = *read++;
+    *write++ = toupper(ch);
+  }
+  return dest;
+}
+
+char* UpperCase_P(char* dest, const char* source)
+{
+  char* write = dest;
+  const char* read = source;
+  char ch = '.';
+
+  while (ch != '\0') {
+    ch = pgm_read_byte(read++);
+    *write++ = toupper(ch);
+  }
+  return dest;
+}
+
+char* Trim(char* p)
+{
+  while ((*p != '\0') && isblank(*p)) { p++; }  // Trim leading spaces
+  char* q = p + strlen(p) -1;
+  while ((q >= p) && isblank(*q)) { q--; }   // Trim trailing spaces
+  q++;
+  *q = '\0';
+  return p;
+}
+
+char* NoAlNumToUnderscore(char* dest, const char* source)
+{
+  char* write = dest;
+  const char* read = source;
+  char ch = '.';
+
+  while (ch != '\0') {
+    ch = *read++;
+    *write++ = (isalnum(ch) || ('\0' == ch)) ? ch : '_';
+  }
+  return dest;
+}
+
+char IndexSeparator()
+{
+/*
+  // 20 bytes more costly !?!
+  const char separators[] = { "-_" };
+
+  return separators[Settings.flag3.use_underscore];
+*/
+  if (Settings.flag3.use_underscore) {
+    return '_';
+  } else {
+    return '-';
+  }
+}
+
+void SetShortcutDefault(void)
+{
+  if ('\0' != XdrvMailbox.data[0]) {     // There must be at least one character in the buffer
+    XdrvMailbox.data[0] = '0' + SC_DEFAULT;  // SC_CLEAR, SC_DEFAULT, SC_USER
+    XdrvMailbox.data[1] = '\0';
+  }
+}
+
+uint8_t Shortcut()
+{
+  uint8_t result = 10;
+
+  if ('\0' == XdrvMailbox.data[1]) {    // Only allow single character input for shortcut
+    if (('"' == XdrvMailbox.data[0]) || ('0' == XdrvMailbox.data[0])) {
+      result = SC_CLEAR;
+    } else {
+      result = atoi(XdrvMailbox.data);  // 1 = SC_DEFAULT, 2 = SC_USER
+      if (0 == result) {
+        result = 10;
+      }
+    }
+  }
+  return result;
+}
+
+bool ValidIpAddress(const char* str)
+{
+  const char* p = str;
+
+  while (*p && ((*p == '.') || ((*p >= '0') && (*p <= '9')))) { p++; }
+  return (*p == '\0');
+}
+
+bool ParseIp(uint32_t* addr, const char* str)
 {
   uint8_t *part = (uint8_t*)addr;
-  byte i;
+  uint8_t i;
 
   *addr = 0;
   for (i = 0; i < 4; i++) {
-    part[i] = strtoul(str, NULL, 10);        // Convert byte
+    part[i] = strtoul(str, nullptr, 10);        // Convert byte
     str = strchr(str, '.');
-    if (str == NULL || *str == '\0') {
+    if (str == nullptr || *str == '\0') {
       break;  // No more separators, exit
     }
     str++;                                   // Point to next character after separator
@@ -214,34 +553,11 @@ boolean ParseIp(uint32_t* addr, const char* str)
   return (3 == i);
 }
 
-void MakeValidMqtt(byte option, char* str)
-{
-// option 0 = replace by underscore
-// option 1 = delete character
-  uint16_t i = 0;
-  while (str[i] > 0) {
-//        if ((str[i] == '/') || (str[i] == '+') || (str[i] == '#') || (str[i] == ' ')) {
-    if ((str[i] == '+') || (str[i] == '#') || (str[i] == ' ')) {
-      if (option) {
-        uint16_t j = i;
-        while (str[j] > 0) {
-          str[j] = str[j +1];
-          j++;
-        }
-        i--;
-      } else {
-        str[i] = '_';
-      }
-    }
-    i++;
-  }
-}
-
 // Function to parse & check if version_str is newer than our currently installed version.
 bool NewerVersion(char* version_str)
 {
   uint32_t version = 0;
-  uint8_t i = 0;
+  uint32_t i = 0;
   char *str_ptr;
   char* version_dup = strdup(version_str);  // Duplicate the version_str as strtok_r will modify it.
 
@@ -249,7 +565,7 @@ bool NewerVersion(char* version_str)
     return false;  // Bail if we can't duplicate. Assume bad.
   }
   // Loop through the version string, splitting on '.' seperators.
-  for (char *str = strtok_r(version_dup, ".", &str_ptr); str && i < sizeof(VERSION); str = strtok_r(NULL, ".", &str_ptr), i++) {
+  for (char *str = strtok_r(version_dup, ".", &str_ptr); str && i < sizeof(VERSION); str = strtok_r(nullptr, ".", &str_ptr), i++) {
     int field = atoi(str);
     // The fields in a version string can only range from 0-255.
     if ((field < 0) || (field > 255)) {
@@ -281,19 +597,19 @@ bool NewerVersion(char* version_str)
   return (version > VERSION);
 }
 
-char* GetPowerDevice(char* dest, uint8_t idx, size_t size, uint8_t option)
+char* GetPowerDevice(char* dest, uint32_t idx, size_t size, uint32_t option)
 {
   char sidx[8];
 
-  strncpy_P(dest, S_RSLT_POWER, size);
+  strncpy_P(dest, S_RSLT_POWER, size);                // POWER
   if ((devices_present + option) > 1) {
-    snprintf_P(sidx, sizeof(sidx), PSTR("%d"), idx);
-    strncat(dest, sidx, size);
+    snprintf_P(sidx, sizeof(sidx), PSTR("%d"), idx);  // x
+    strncat(dest, sidx, size - strlen(dest) -1);      // POWERx
   }
   return dest;
 }
 
-char* GetPowerDevice(char* dest, uint8_t idx, size_t size)
+char* GetPowerDevice(char* dest, uint32_t idx, size_t size)
 {
   return GetPowerDevice(dest, idx, size, 0);
 }
@@ -302,42 +618,93 @@ float ConvertTemp(float c)
 {
   float result = c;
 
+  global_update = uptime;
+  global_temperature = c;
+
   if (!isnan(c) && Settings.flag.temperature_conversion) {
     result = c * 1.8 + 32;  // Fahrenheit
   }
   return result;
 }
 
-char TempUnit()
+float ConvertTempToCelsius(float c)
+{
+  float result = c;
+
+  if (!isnan(c) && Settings.flag.temperature_conversion) {
+    result = (c - 32) / 1.8;  // Celsius
+  }
+  return result;
+}
+
+char TempUnit(void)
 {
   return (Settings.flag.temperature_conversion) ? 'F' : 'C';
 }
 
-double FastPrecisePow(double a, double b)
+float ConvertHumidity(float h)
 {
-  // https://martin.ankerl.com/2012/01/25/optimized-approximative-pow-in-c-and-cpp/
-  // calculate approximation with fraction of the exponent
-  int e = (int)b;
-  union {
-    double d;
-    int x[2];
-  } u = { a };
-  u.x[1] = (int)((b - e) * (u.x[1] - 1072632447) + 1072632447);
-  u.x[0] = 0;
-  // exponentiation by squaring with the exponent's integer part
-  // double r = u.d makes everything much slower, not sure why
-  double r = 1.0;
-  while (e) {
-    if (e & 1) {
-      r *= a;
-    }
-    a *= a;
-    e >>= 1;
-  }
-  return r * u.d;
+  global_update = uptime;
+  global_humidity = h;
+
+  return h;
 }
 
-char* GetTextIndexed(char* destination, size_t destination_size, uint16_t index, const char* haystack)
+float ConvertPressure(float p)
+{
+  float result = p;
+
+  global_update = uptime;
+  global_pressure = p;
+
+  if (!isnan(p) && Settings.flag.pressure_conversion) {
+    result = p * 0.75006375541921;  // mmHg
+  }
+  return result;
+}
+
+String PressureUnit(void)
+{
+  return (Settings.flag.pressure_conversion) ? String(D_UNIT_MILLIMETER_MERCURY) : String(D_UNIT_PRESSURE);
+}
+
+void ResetGlobalValues(void)
+{
+  if ((uptime - global_update) > GLOBAL_VALUES_VALID) {  // Reset after 5 minutes
+    global_update = 0;
+    global_temperature = 9999;
+    global_humidity = 0;
+    global_pressure = 0;
+  }
+}
+
+uint32_t SqrtInt(uint32_t num)
+{
+  if (num <= 1) {
+    return num;
+  }
+
+  uint32_t x = num / 2;
+  uint32_t y;
+  do {
+    y = (x + num / x) / 2;
+    if (y >= x) {
+      return x;
+    }
+    x = y;
+  } while (true);
+}
+
+uint32_t RoundSqrtInt(uint32_t num)
+{
+  uint32_t s = SqrtInt(4 * num);
+  if (s & 1) {
+    s++;
+  }
+  return s / 2;
+}
+
+char* GetTextIndexed(char* destination, size_t destination_size, uint32_t index, const char* haystack)
 {
   // Returns empty string if not found
   // Returns text of found
@@ -399,12 +766,49 @@ int GetCommandCode(char* destination, size_t destination_size, const char* needl
   return result;
 }
 
+bool DecodeCommand(const char* haystack, void (* const MyCommand[])(void))
+{
+  GetTextIndexed(XdrvMailbox.command, CMDSZ, 0, haystack);  // Get prefix if available
+  int prefix_length = strlen(XdrvMailbox.command);
+  int command_code = GetCommandCode(XdrvMailbox.command + prefix_length, CMDSZ, XdrvMailbox.topic + prefix_length, haystack);
+  if (command_code > 0) {                                   // Skip prefix
+    XdrvMailbox.command_code = command_code -1;
+    MyCommand[XdrvMailbox.command_code]();
+    return true;
+  }
+  return false;
+}
+
+const char kOptions[] PROGMEM = "OFF|" D_OFF "|" D_FALSE "|" D_STOP "|" D_CELSIUS "|"              // 0
+                                "ON|" D_ON "|" D_TRUE "|" D_START "|" D_FAHRENHEIT "|" D_USER "|"  // 1
+                                "TOGGLE|" D_TOGGLE "|" D_ADMIN "|"                                 // 2
+                                "BLINK|" D_BLINK "|"                                               // 3
+                                "BLINKOFF|" D_BLINKOFF "|"                                         // 4
+                                "ALL" ;                                                            // 255
+
+const uint8_t sNumbers[] PROGMEM = { 0,0,0,0,0,
+                                     1,1,1,1,1,1,
+                                     2,2,2,
+                                     3,3,
+                                     4,4,
+                                     255 };
+
+int GetStateNumber(char *state_text)
+{
+  char command[CMDSZ];
+  int state_number = GetCommandCode(command, sizeof(command), state_text, kOptions);
+  if (state_number >= 0) {
+    state_number = pgm_read_byte(sNumbers + state_number);
+  }
+  return state_number;
+}
+
 void SetSerialBaudrate(int baudrate)
 {
+  Settings.baudrate = baudrate / 300;
   if (Serial.baudRate() != baudrate) {
     if (seriallog_level) {
-      snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_APPLICATION D_SET_BAUDRATE_TO " %d"), baudrate);
-      AddLog(LOG_LEVEL_INFO);
+      AddLog_P2(LOG_LEVEL_INFO, PSTR(D_LOG_APPLICATION D_SET_BAUDRATE_TO " %d"), baudrate);
     }
     delay(100);
     Serial.flush();
@@ -414,421 +818,476 @@ void SetSerialBaudrate(int baudrate)
   }
 }
 
+void ClaimSerial(void)
+{
+  serial_local = true;
+  AddLog_P(LOG_LEVEL_INFO, PSTR("SNS: Hardware Serial"));
+  SetSeriallog(LOG_LEVEL_NONE);
+  baudrate = Serial.baudRate();
+  Settings.baudrate = baudrate / 300;
+}
+
+void SerialSendRaw(char *codes)
+{
+  char *p;
+  char stemp[3];
+  uint8_t code;
+
+  int size = strlen(codes);
+
+  while (size > 0) {
+    strlcpy(stemp, codes, sizeof(stemp));
+    code = strtol(stemp, &p, 16);
+    Serial.write(code);
+    size -= 2;
+    codes += 2;
+  }
+}
+
 uint32_t GetHash(const char *buffer, size_t size)
 {
   uint32_t hash = 0;
-  for (uint16_t i = 0; i <= size; i++) {
+  for (uint32_t i = 0; i <= size; i++) {
     hash += (uint8_t)*buffer++ * (i +1);
   }
   return hash;
 }
 
+void ShowSource(uint32_t source)
+{
+  if ((source > 0) && (source < SRC_MAX)) {
+    char stemp1[20];
+    AddLog_P2(LOG_LEVEL_DEBUG, PSTR("SRC: %s"), GetTextIndexed(stemp1, sizeof(stemp1), source, kCommandSource));
+  }
+}
+
+void WebHexCode(uint32_t i, const char* code)
+{
+  char scolor[10];
+
+  strlcpy(scolor, code, sizeof(scolor));
+  char* p = scolor;
+  if ('#' == p[0]) { p++; }  // Skip
+
+  if (3 == strlen(p)) {  // Convert 3 character to 6 character color code
+    p[6] = p[3];  // \0
+    p[5] = p[2];  // 3
+    p[4] = p[2];  // 3
+    p[3] = p[1];  // 2
+    p[2] = p[1];  // 2
+    p[1] = p[0];  // 1
+  }
+
+  uint32_t color = strtol(p, nullptr, 16);
+/*
+  if (3 == strlen(p)) {  // Convert 3 character to 6 character color code
+    uint32_t w = ((color & 0xF00) << 8) | ((color & 0x0F0) << 4) | (color & 0x00F);  // 00010203
+    color = w | (w << 4);                                                            // 00112233
+  }
+*/
+
+  Settings.web_color[i][0] = (color >> 16) & 0xFF;  // Red
+  Settings.web_color[i][1] = (color >> 8) & 0xFF;   // Green
+  Settings.web_color[i][2] = color & 0xFF;          // Blue
+}
+
+uint32_t WebColor(uint32_t i)
+{
+  uint32_t tcolor = (Settings.web_color[i][0] << 16) | (Settings.web_color[i][1] << 8) | Settings.web_color[i][2];
+  return tcolor;
+}
+
 /*********************************************************************************************\
- * Wifi
+ * Response data handling
 \*********************************************************************************************/
 
-#define WIFI_CONFIG_SEC   180  // seconds before restart
-#define WIFI_CHECK_SEC    20   // seconds
-#define WIFI_RETRY_SEC    30   // seconds
+const uint16_t TIMESZ = 100;                   // Max number of characters in time string
 
-uint8_t wifi_counter;
-uint8_t wifi_retry;
-uint8_t wifi_status;
-uint8_t wps_result;
-uint8_t wifi_config_type = 0;
-uint8_t wifi_config_counter = 0;
-
-int WifiGetRssiAsQuality(int rssi)
+char* ResponseGetTime(uint32_t format, char* time_str)
 {
-  int quality = 0;
+  switch (format) {
+  case 1:
+    snprintf_P(time_str, TIMESZ, PSTR("{\"" D_JSON_TIME "\":\"%s\",\"Epoch\":%u"), GetDateAndTime(DT_LOCAL).c_str(), UtcTime());
+    break;
+  case 2:
+    snprintf_P(time_str, TIMESZ, PSTR("{\"" D_JSON_TIME "\":%u"), UtcTime());
+    break;
+  default:
+    snprintf_P(time_str, TIMESZ, PSTR("{\"" D_JSON_TIME "\":\"%s\""), GetDateAndTime(DT_LOCAL).c_str());
+  }
+  return time_str;
+}
 
-  if (rssi <= -100) {
-    quality = 0;
-  } else if (rssi >= -50) {
-    quality = 100;
+int Response_P(const char* format, ...)        // Content send snprintf_P char data
+{
+  // This uses char strings. Be aware of sending %% if % is needed
+  va_list args;
+  va_start(args, format);
+  int len = vsnprintf_P(mqtt_data, sizeof(mqtt_data), format, args);
+  va_end(args);
+  return len;
+}
+
+int ResponseTime_P(const char* format, ...)    // Content send snprintf_P char data
+{
+  // This uses char strings. Be aware of sending %% if % is needed
+  va_list args;
+  va_start(args, format);
+
+  ResponseGetTime(Settings.flag2.time_format, mqtt_data);
+
+  int mlen = strlen(mqtt_data);
+  int len = vsnprintf_P(mqtt_data + mlen, sizeof(mqtt_data) - mlen, format, args);
+  va_end(args);
+  return len + mlen;
+}
+
+int ResponseAppend_P(const char* format, ...)  // Content send snprintf_P char data
+{
+  // This uses char strings. Be aware of sending %% if % is needed
+  va_list args;
+  va_start(args, format);
+  int mlen = strlen(mqtt_data);
+  int len = vsnprintf_P(mqtt_data + mlen, sizeof(mqtt_data) - mlen, format, args);
+  va_end(args);
+  return len + mlen;
+}
+
+int ResponseAppendTimeFormat(uint32_t format)
+{
+  char time_str[TIMESZ];
+  return ResponseAppend_P(ResponseGetTime(format, time_str));
+}
+
+int ResponseAppendTime(void)
+{
+  return ResponseAppendTimeFormat(Settings.flag2.time_format);
+}
+
+int ResponseJsonEnd(void)
+{
+  return ResponseAppend_P(PSTR("}"));
+}
+
+int ResponseJsonEndEnd(void)
+{
+  return ResponseAppend_P(PSTR("}}"));
+}
+
+/*********************************************************************************************\
+ * GPIO Module and Template management
+\*********************************************************************************************/
+
+uint8_t ModuleNr()
+{
+  // 0    = User module (255)
+  // 1 up = Template module 0 up
+  return (USER_MODULE == Settings.module) ? 0 : Settings.module +1;
+}
+
+bool ValidTemplateModule(uint32_t index)
+{
+  for (uint32_t i = 0; i < sizeof(kModuleNiceList); i++) {
+    if (index == pgm_read_byte(kModuleNiceList + i)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool ValidModule(uint32_t index)
+{
+  if (index == USER_MODULE) { return true; }
+  return ValidTemplateModule(index);
+}
+
+String AnyModuleName(uint32_t index)
+{
+  if (USER_MODULE == index) {
+    return String(Settings.user_template.name);
   } else {
-    quality = 2 * (rssi + 100);
+    return FPSTR(kModules[index].name);
   }
-  return quality;
 }
 
-boolean WifiConfigCounter()
+String ModuleName()
 {
-  if (wifi_config_counter) {
-    wifi_config_counter = WIFI_CONFIG_SEC;
-  }
-  return (wifi_config_counter);
+  return AnyModuleName(Settings.module);
 }
 
-extern "C" {
-#include "user_interface.h"
-}
-
-void WifiWpsStatusCallback(wps_cb_status status);
-
-void WifiWpsStatusCallback(wps_cb_status status)
+void ModuleGpios(myio *gp)
 {
-/* from user_interface.h:
-  enum wps_cb_status {
-    WPS_CB_ST_SUCCESS = 0,
-    WPS_CB_ST_FAILED,
-    WPS_CB_ST_TIMEOUT,
-    WPS_CB_ST_WEP,      // WPS failed because that WEP is not supported
-    WPS_CB_ST_SCAN_ERR, // can not find the target WPS AP
-  };
-*/
-  wps_result = status;
-  if (WPS_CB_ST_SUCCESS == wps_result) {
-    wifi_wps_disable();
+  uint8_t *dest = (uint8_t *)gp;
+  memset(dest, GPIO_NONE, sizeof(myio));
+
+  uint8_t src[sizeof(mycfgio)];
+  if (USER_MODULE == Settings.module) {
+    memcpy(&src, &Settings.user_template.gp, sizeof(mycfgio));
   } else {
-    snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_WIFI D_WPS_FAILED_WITH_STATUS " %d"), wps_result);
-    AddLog(LOG_LEVEL_DEBUG);
-    wifi_config_counter = 2;
+    memcpy_P(&src, &kModules[Settings.module].gp, sizeof(mycfgio));
   }
+  // 11 85 00 85 85 00 00 00 15 38 85 00 00 81
+
+//  AddLogBuffer(LOG_LEVEL_DEBUG, (uint8_t *)&src, sizeof(mycfgio));
+
+  uint32_t j = 0;
+  for (uint32_t i = 0; i < sizeof(mycfgio); i++) {
+    if (6 == i) { j = 9; }
+    if (8 == i) { j = 12; }
+    dest[j] = src[i];
+    j++;
+  }
+  // 11 85 00 85 85 00 00 00 00 00 00 00 15 38 85 00 00 81
+
+//  AddLogBuffer(LOG_LEVEL_DEBUG, (uint8_t *)gp, sizeof(myio));
 }
 
-boolean WifiWpsConfigDone(void)
+gpio_flag ModuleFlag()
 {
-  return (!wps_result);
+  gpio_flag flag;
+
+  if (USER_MODULE == Settings.module) {
+    flag = Settings.user_template.flag;
+  } else {
+    memcpy_P(&flag, &kModules[Settings.module].flag, sizeof(gpio_flag));
+  }
+
+  return flag;
 }
 
-boolean WifiWpsConfigBegin(void)
+void ModuleDefault(uint32_t module)
 {
-  wps_result = 99;
-  if (!wifi_wps_disable()) {
-    return false;
+  if (USER_MODULE == module) { module = WEMOS; }  // Generic
+  Settings.user_template_base = module;
+  memcpy_P(&Settings.user_template, &kModules[module], sizeof(mytmplt));
+}
+
+void SetModuleType()
+{
+  my_module_type = (USER_MODULE == Settings.module) ? Settings.user_template_base : Settings.module;
+}
+
+uint8_t ValidPin(uint32_t pin, uint32_t gpio)
+{
+  uint8_t result = gpio;
+
+  if (((pin > 5) && (pin < 9)) || (11 == pin)) {
+    result = GPIO_NONE;  // Disable flash pins GPIO6, GPIO7, GPIO8 and GPIO11
   }
-  if (!wifi_wps_enable(WPS_TYPE_PBC)) {
-    return false;  // so far only WPS_TYPE_PBC is supported (SDK 2.0.0)
+  if ((WEMOS == Settings.module) && (!Settings.flag3.user_esp8285_enable)) {
+    if ((pin == 9) || (pin == 10)) { result = GPIO_NONE; }  // Disable possible flash GPIO9 and GPIO10
   }
-  if (!wifi_set_wps_cb((wps_st_cb_t) &WifiWpsStatusCallback)) {
-    return false;
+  return result;
+}
+
+bool ValidGPIO(uint32_t pin, uint32_t gpio)
+{
+  return (GPIO_USER == ValidPin(pin, gpio));  // Only allow GPIO_USER pins
+}
+
+bool ValidAdc()
+{
+  gpio_flag flag = ModuleFlag();
+  uint32_t template_adc0 = flag.data &15;
+  return (ADC0_USER == template_adc0);
+}
+
+bool GetUsedInModule(uint32_t val, uint8_t *arr)
+{
+  int offset = 0;
+
+  if (!val) { return false; }  // None
+
+  if ((val >= GPIO_KEY1) && (val < GPIO_KEY1 + MAX_KEYS)) {
+    offset = (GPIO_KEY1_NP - GPIO_KEY1);
   }
-  if (!wifi_wps_start()) {
-    return false;
+  if ((val >= GPIO_KEY1_NP) && (val < GPIO_KEY1_NP + MAX_KEYS)) {
+    offset = -(GPIO_KEY1_NP - GPIO_KEY1);
+  }
+  if ((val >= GPIO_KEY1_INV) && (val < GPIO_KEY1_INV + MAX_KEYS)) {
+    offset = -(GPIO_KEY1_INV - GPIO_KEY1);
+  }
+  if ((val >= GPIO_KEY1_INV_NP) && (val < GPIO_KEY1_INV_NP + MAX_KEYS)) {
+    offset = -(GPIO_KEY1_INV_NP - GPIO_KEY1);
+  }
+
+  if ((val >= GPIO_SWT1) && (val < GPIO_SWT1 + MAX_SWITCHES)) {
+    offset = (GPIO_SWT1_NP - GPIO_SWT1);
+  }
+  if ((val >= GPIO_SWT1_NP) && (val < GPIO_SWT1_NP + MAX_SWITCHES)) {
+    offset = -(GPIO_SWT1_NP - GPIO_SWT1);
+  }
+
+  if ((val >= GPIO_REL1) && (val < GPIO_REL1 + MAX_RELAYS)) {
+    offset = (GPIO_REL1_INV - GPIO_REL1);
+  }
+  if ((val >= GPIO_REL1_INV) && (val < GPIO_REL1_INV + MAX_RELAYS)) {
+    offset = -(GPIO_REL1_INV - GPIO_REL1);
+  }
+
+  if ((val >= GPIO_LED1) && (val < GPIO_LED1 + MAX_LEDS)) {
+    offset = (GPIO_LED1_INV - GPIO_LED1);
+  }
+  if ((val >= GPIO_LED1_INV) && (val < GPIO_LED1_INV + MAX_LEDS)) {
+    offset = -(GPIO_LED1_INV - GPIO_LED1);
+  }
+
+  if ((val >= GPIO_PWM1) && (val < GPIO_PWM1 + MAX_PWMS)) {
+    offset = (GPIO_PWM1_INV - GPIO_PWM1);
+  }
+  if ((val >= GPIO_PWM1_INV) && (val < GPIO_PWM1_INV + MAX_PWMS)) {
+    offset = -(GPIO_PWM1_INV - GPIO_PWM1);
+  }
+
+  if ((val >= GPIO_CNTR1) && (val < GPIO_CNTR1 + MAX_COUNTERS)) {
+    offset = (GPIO_CNTR1_NP - GPIO_CNTR1);
+  }
+  if ((val >= GPIO_CNTR1_NP) && (val < GPIO_CNTR1_NP + MAX_COUNTERS)) {
+    offset = -(GPIO_CNTR1_NP - GPIO_CNTR1);
+  }
+
+  for (uint32_t i = 0; i < MAX_GPIO_PIN; i++) {
+    if (arr[i] == val) { return true; }
+    if (arr[i] == val + offset) { return true; }
+  }
+  return false;
+}
+
+bool JsonTemplate(const char* dataBuf)
+{
+  // {"NAME":"Generic","GPIO":[17,254,29,254,7,254,254,254,138,254,139,254,254],"FLAG":1,"BASE":255}
+
+  if (strlen(dataBuf) < 9) { return false; }  // Workaround exception if empty JSON like {} - Needs checks
+
+  StaticJsonBuffer<350> jb;  // 331 from https://arduinojson.org/v5/assistant/
+  JsonObject& obj = jb.parseObject(dataBuf);
+  if (!obj.success()) { return false; }
+
+  // All parameters are optional allowing for partial changes
+  const char* name = obj[D_JSON_NAME];
+  if (name != nullptr) {
+    strlcpy(Settings.user_template.name, name, sizeof(Settings.user_template.name));
+  }
+  if (obj[D_JSON_GPIO].success()) {
+    for (uint32_t i = 0; i < sizeof(mycfgio); i++) {
+      Settings.user_template.gp.io[i] = obj[D_JSON_GPIO][i] | 0;
+    }
+  }
+  if (obj[D_JSON_FLAG].success()) {
+    uint8_t flag = obj[D_JSON_FLAG] | 0;
+    memcpy(&Settings.user_template.flag, &flag, sizeof(gpio_flag));
+  }
+  if (obj[D_JSON_BASE].success()) {
+    uint8_t base = obj[D_JSON_BASE];
+    if ((0 == base) || !ValidTemplateModule(base -1)) { base = 18; }
+    Settings.user_template_base = base -1;  // Default WEMOS
   }
   return true;
 }
 
-void WifiConfig(uint8_t type)
+void TemplateJson()
 {
-  if (!wifi_config_type) {
-    if (type >= WIFI_RETRY) {  // WIFI_RETRY and WIFI_WAIT
-      return;
-    }
-#ifdef USE_EMULATION
-    UdpDisconnect();
-#endif  // USE_EMULATION
-    WiFi.disconnect();        // Solve possible Wifi hangs
-    wifi_config_type = type;
-    wifi_config_counter = WIFI_CONFIG_SEC;   // Allow up to WIFI_CONFIG_SECS seconds for phone to provide ssid/pswd
-    wifi_counter = wifi_config_counter +5;
-    blinks = 1999;
-    if (WIFI_RESTART == wifi_config_type) {
-      restart_flag = 2;
-    }
-    else if (WIFI_SMARTCONFIG == wifi_config_type) {
-      AddLog_P(LOG_LEVEL_INFO, S_LOG_WIFI, PSTR(D_WCFG_1_SMARTCONFIG " " D_ACTIVE_FOR_3_MINUTES));
-      WiFi.beginSmartConfig();
-    }
-    else if (WIFI_WPSCONFIG == wifi_config_type) {
-      if (WifiWpsConfigBegin()) {
-        AddLog_P(LOG_LEVEL_INFO, S_LOG_WIFI, PSTR(D_WCFG_3_WPSCONFIG " " D_ACTIVE_FOR_3_MINUTES));
-      } else {
-        AddLog_P(LOG_LEVEL_INFO, S_LOG_WIFI, PSTR(D_WCFG_3_WPSCONFIG " " D_FAILED_TO_START));
-        wifi_config_counter = 3;
-      }
-    }
-#ifdef USE_WEBSERVER
-    else if (WIFI_MANAGER == wifi_config_type) {
-      AddLog_P(LOG_LEVEL_INFO, S_LOG_WIFI, PSTR(D_WCFG_2_WIFIMANAGER " " D_ACTIVE_FOR_3_MINUTES));
-      WifiManagerBegin();
-    }
-#endif  // USE_WEBSERVER
+  Response_P(PSTR("{\"" D_JSON_NAME "\":\"%s\",\"" D_JSON_GPIO "\":["), Settings.user_template.name);
+  for (uint32_t i = 0; i < sizeof(Settings.user_template.gp); i++) {
+    ResponseAppend_P(PSTR("%s%d"), (i>0)?",":"", Settings.user_template.gp.io[i]);
   }
+  ResponseAppend_P(PSTR("],\"" D_JSON_FLAG "\":%d,\"" D_JSON_BASE "\":%d}"), Settings.user_template.flag, Settings.user_template_base +1);
 }
 
-void WifiBegin(uint8_t flag)
-{
-  const char kWifiPhyMode[] = " BGN";
-
-#ifdef USE_EMULATION
-  UdpDisconnect();
-#endif  // USE_EMULATION
-
-#ifdef ARDUINO_ESP8266_RELEASE_2_3_0  // (!strncmp_P(ESP.getSdkVersion(),PSTR("1.5.3"),5))
-  AddLog_P(LOG_LEVEL_DEBUG, S_LOG_WIFI, PSTR(D_PATCH_ISSUE_2186));
-  WiFi.mode(WIFI_OFF);      // See https://github.com/esp8266/Arduino/issues/2186
-#endif
-
-  WiFi.disconnect(true);    // Delete SDK wifi config
-  delay(200);
-  WiFi.mode(WIFI_STA);      // Disable AP mode
-  if (Settings.sleep) {
-    WiFi.setSleepMode(WIFI_LIGHT_SLEEP);  // Allow light sleep during idle times
-  }
-//  if (WiFi.getPhyMode() != WIFI_PHY_MODE_11N) {
-//    WiFi.setPhyMode(WIFI_PHY_MODE_11N);
-//  }
-  if (!WiFi.getAutoConnect()) {
-    WiFi.setAutoConnect(true);
-  }
-//  WiFi.setAutoReconnect(true);
-  switch (flag) {
-  case 0:  // AP1
-  case 1:  // AP2
-    Settings.sta_active = flag;
-    break;
-  case 2:  // Toggle
-    Settings.sta_active ^= 1;
-  }        // 3: Current AP
-  if (0 == strlen(Settings.sta_ssid[1])) {
-    Settings.sta_active = 0;
-  }
-  if (Settings.ip_address[0]) {
-    WiFi.config(Settings.ip_address[0], Settings.ip_address[1], Settings.ip_address[2], Settings.ip_address[3]);  // Set static IP
-  }
-  WiFi.hostname(my_hostname);
-  WiFi.begin(Settings.sta_ssid[Settings.sta_active], Settings.sta_pwd[Settings.sta_active]);
-  snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_WIFI D_CONNECTING_TO_AP "%d %s " D_IN_MODE " 11%c " D_AS " %s..."),
-    Settings.sta_active +1, Settings.sta_ssid[Settings.sta_active], kWifiPhyMode[WiFi.getPhyMode() & 0x3], my_hostname);
-  AddLog(LOG_LEVEL_INFO);
-}
-
-void WifiCheckIp()
-{
-  if ((WL_CONNECTED == WiFi.status()) && (static_cast<uint32_t>(WiFi.localIP()) != 0)) {
-    wifi_counter = WIFI_CHECK_SEC;
-    wifi_retry = WIFI_RETRY_SEC;
-    AddLog_P((wifi_status != WL_CONNECTED) ? LOG_LEVEL_INFO : LOG_LEVEL_DEBUG_MORE, S_LOG_WIFI, PSTR(D_CONNECTED));
-    if (wifi_status != WL_CONNECTED) {
-//      AddLog_P(LOG_LEVEL_INFO, PSTR("Wifi: Set IP addresses"));
-      Settings.ip_address[1] = (uint32_t)WiFi.gatewayIP();
-      Settings.ip_address[2] = (uint32_t)WiFi.subnetMask();
-      Settings.ip_address[3] = (uint32_t)WiFi.dnsIP();
-    }
-    wifi_status = WL_CONNECTED;
-  } else {
-    wifi_status = WiFi.status();
-    switch (wifi_status) {
-      case WL_CONNECTED:
-        AddLog_P(LOG_LEVEL_INFO, S_LOG_WIFI, PSTR(D_CONNECT_FAILED_NO_IP_ADDRESS));
-        wifi_status = 0;
-        wifi_retry = WIFI_RETRY_SEC;
-        break;
-      case WL_NO_SSID_AVAIL:
-        AddLog_P(LOG_LEVEL_INFO, S_LOG_WIFI, PSTR(D_CONNECT_FAILED_AP_NOT_REACHED));
-        if (WIFI_WAIT == Settings.sta_config) {
-          wifi_retry = WIFI_RETRY_SEC;
-        } else {
-          if (wifi_retry > (WIFI_RETRY_SEC / 2)) {
-            wifi_retry = WIFI_RETRY_SEC / 2;
-          }
-          else if (wifi_retry) {
-            wifi_retry = 0;
-          }
-        }
-        break;
-      case WL_CONNECT_FAILED:
-        AddLog_P(LOG_LEVEL_INFO, S_LOG_WIFI, PSTR(D_CONNECT_FAILED_WRONG_PASSWORD));
-        if (wifi_retry > (WIFI_RETRY_SEC / 2)) {
-          wifi_retry = WIFI_RETRY_SEC / 2;
-        }
-        else if (wifi_retry) {
-          wifi_retry = 0;
-        }
-        break;
-      default:  // WL_IDLE_STATUS and WL_DISCONNECTED
-        if (!wifi_retry || ((WIFI_RETRY_SEC / 2) == wifi_retry)) {
-          AddLog_P(LOG_LEVEL_INFO, S_LOG_WIFI, PSTR(D_CONNECT_FAILED_AP_TIMEOUT));
-        } else {
-          AddLog_P(LOG_LEVEL_DEBUG, S_LOG_WIFI, PSTR(D_ATTEMPTING_CONNECTION));
-        }
-    }
-    if (wifi_retry) {
-      if (WIFI_RETRY_SEC == wifi_retry) {
-        WifiBegin(3);  // Select default SSID
-      }
-      if ((Settings.sta_config != WIFI_WAIT) && ((WIFI_RETRY_SEC / 2) == wifi_retry)) {
-        WifiBegin(2);  // Select alternate SSID
-      }
-      wifi_counter = 1;
-      wifi_retry--;
-    } else {
-      WifiConfig(Settings.sta_config);
-      wifi_counter = 1;
-      wifi_retry = WIFI_RETRY_SEC;
-    }
-  }
-}
-
-void WifiCheck(uint8_t param)
-{
-  wifi_counter--;
-  switch (param) {
-  case WIFI_SMARTCONFIG:
-  case WIFI_MANAGER:
-  case WIFI_WPSCONFIG:
-    WifiConfig(param);
-    break;
-  default:
-    if (wifi_config_counter) {
-      wifi_config_counter--;
-      wifi_counter = wifi_config_counter +5;
-      if (wifi_config_counter) {
-        if ((WIFI_SMARTCONFIG == wifi_config_type) && WiFi.smartConfigDone()) {
-          wifi_config_counter = 0;
-        }
-        if ((WIFI_WPSCONFIG == wifi_config_type) && WifiWpsConfigDone()) {
-          wifi_config_counter = 0;
-        }
-        if (!wifi_config_counter) {
-          if (strlen(WiFi.SSID().c_str())) {
-            strlcpy(Settings.sta_ssid[0], WiFi.SSID().c_str(), sizeof(Settings.sta_ssid[0]));
-          }
-          if (strlen(WiFi.psk().c_str())) {
-            strlcpy(Settings.sta_pwd[0], WiFi.psk().c_str(), sizeof(Settings.sta_pwd[0]));
-          }
-          Settings.sta_active = 0;
-          snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_WIFI D_WCFG_1_SMARTCONFIG D_CMND_SSID "1 %s, " D_CMND_PASSWORD "1 %s"), Settings.sta_ssid[0], Settings.sta_pwd[0]);
-          AddLog(LOG_LEVEL_INFO);
-        }
-      }
-      if (!wifi_config_counter) {
-        if (WIFI_SMARTCONFIG == wifi_config_type) {
-          WiFi.stopSmartConfig();
-        }
-        SettingsSdkErase();
-        restart_flag = 2;
-      }
-    } else {
-      if (wifi_counter <= 0) {
-        AddLog_P(LOG_LEVEL_DEBUG_MORE, S_LOG_WIFI, PSTR(D_CHECKING_CONNECTION));
-        wifi_counter = WIFI_CHECK_SEC;
-        WifiCheckIp();
-      }
-      if ((WL_CONNECTED == WiFi.status()) && (static_cast<uint32_t>(WiFi.localIP()) != 0) && !wifi_config_type) {
-#ifdef BE_MINIMAL
-        if (1 == RtcSettings.ota_loader) {
-          RtcSettings.ota_loader = 0;
-          ota_state_flag = 3;
-        }
-#endif  // BE_MINIMAL
-#ifdef USE_DISCOVERY
-        if (!mdns_begun) {
-          mdns_begun = MDNS.begin(my_hostname);
-          snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_MDNS "%s"), (mdns_begun) ? D_INITIALIZED : D_FAILED);
-          AddLog(LOG_LEVEL_INFO);
-        }
-#endif  // USE_DISCOVERY
-#ifdef USE_WEBSERVER
-        if (Settings.webserver) {
-          StartWebserver(Settings.webserver, WiFi.localIP());
-#ifdef USE_DISCOVERY
-#ifdef WEBSERVER_ADVERTISE
-          MDNS.addService("http", "tcp", 80);
-#endif  // WEBSERVER_ADVERTISE
-#endif  // USE_DISCOVERY
-        } else {
-          StopWebserver();
-        }
-#ifdef USE_EMULATION
-        if (Settings.flag2.emulation) {
-          UdpConnect();
-        }
-#endif  // USE_EMULATION
-#endif  // USE_WEBSERVER
-      } else {
-#ifdef USE_EMULATION
-        UdpDisconnect();
-#endif  // USE_EMULATION
-        mdns_begun = false;
-      }
-    }
-  }
-}
-
-int WifiState()
-{
-  int state;
-
-  if ((WL_CONNECTED == WiFi.status()) && (static_cast<uint32_t>(WiFi.localIP()) != 0)) {
-    state = WIFI_RESTART;
-  }
-  if (wifi_config_type) {
-    state = wifi_config_type;
-  }
-  return state;
-}
-
-void WifiConnect()
-{
-  WiFi.persistent(false);   // Solve possible wifi init errors
-  wifi_status = 0;
-  wifi_retry = WIFI_RETRY_SEC;
-  wifi_counter = 1;
-}
-
-#ifdef USE_DISCOVERY
 /*********************************************************************************************\
- * mDNS
+ * Sleep aware time scheduler functions borrowed from ESPEasy
 \*********************************************************************************************/
 
-#ifdef MQTT_HOST_DISCOVERY
-boolean MdnsDiscoverMqttServer()
+long TimeDifference(unsigned long prev, unsigned long next)
 {
-  if (!mdns_begun) {
-    return false;
+  // Return the time difference as a signed value, taking into account the timers may overflow.
+  // Returned timediff is between -24.9 days and +24.9 days.
+  // Returned value is positive when "next" is after "prev"
+  long signed_diff = 0;
+  // To cast a value to a signed long, the difference may not exceed half 0xffffffffUL (= 4294967294)
+  const unsigned long half_max_unsigned_long = 2147483647u;  // = 2^31 -1
+  if (next >= prev) {
+    const unsigned long diff = next - prev;
+    if (diff <= half_max_unsigned_long) {                    // Normal situation, just return the difference.
+      signed_diff = static_cast<long>(diff);                 // Difference is a positive value.
+    } else {
+      // prev has overflow, return a negative difference value
+      signed_diff = static_cast<long>((0xffffffffUL - next) + prev + 1u);
+      signed_diff = -1 * signed_diff;
+    }
+  } else {
+    // next < prev
+    const unsigned long diff = prev - next;
+    if (diff <= half_max_unsigned_long) {                    // Normal situation, return a negative difference value
+      signed_diff = static_cast<long>(diff);
+      signed_diff = -1 * signed_diff;
+    } else {
+      // next has overflow, return a positive difference value
+      signed_diff = static_cast<long>((0xffffffffUL - prev) + next + 1u);
+    }
   }
-
-  int n = MDNS.queryService("mqtt", "tcp");  // Search for mqtt service
-
-  snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_MDNS D_QUERY_DONE " %d"), n);
-  AddLog(LOG_LEVEL_INFO);
-
-  if (n > 0) {
-    // Note: current strategy is to get the first MQTT service (even when many are found)
-    snprintf_P(Settings.mqtt_host, sizeof(Settings.mqtt_host), MDNS.IP(0).toString().c_str());
-    Settings.mqtt_port = MDNS.port(0);
-
-    snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_MDNS D_MQTT_SERVICE_FOUND " %s, " D_IP_ADDRESS " %s, " D_PORT " %d"),
-      MDNS.hostname(0).c_str(), Settings.mqtt_host, Settings.mqtt_port);
-    AddLog(LOG_LEVEL_INFO);
-  }
-
-  return n > 0;
+  return signed_diff;
 }
-#endif  // MQTT_HOST_DISCOVERY
-#endif  // USE_DISCOVERY
+
+long TimePassedSince(unsigned long timestamp)
+{
+  // Compute the number of milliSeconds passed since timestamp given.
+  // Note: value can be negative if the timestamp has not yet been reached.
+  return TimeDifference(timestamp, millis());
+}
+
+bool TimeReached(unsigned long timer)
+{
+  // Check if a certain timeout has been reached.
+  const long passed = TimePassedSince(timer);
+  return (passed >= 0);
+}
+
+void SetNextTimeInterval(unsigned long& timer, const unsigned long step)
+{
+  timer += step;
+  const long passed = TimePassedSince(timer);
+  if (passed < 0) { return; }   // Event has not yet happened, which is fine.
+  if (static_cast<unsigned long>(passed) > step) {
+    // No need to keep running behind, start again.
+    timer = millis() + step;
+    return;
+  }
+  // Try to get in sync again.
+  timer = millis() + (step - passed);
+}
 
 /*********************************************************************************************\
  * Basic I2C routines
 \*********************************************************************************************/
 
 #ifdef USE_I2C
-#define I2C_RETRY_COUNTER 3
+const uint8_t I2C_RETRY_COUNTER = 3;
 
+uint32_t i2c_active[4] = { 0 };
 uint32_t i2c_buffer = 0;
 
 bool I2cValidRead(uint8_t addr, uint8_t reg, uint8_t size)
 {
-  byte x = I2C_RETRY_COUNTER;
+  uint8_t retry = I2C_RETRY_COUNTER;
+  bool status = false;
 
   i2c_buffer = 0;
-  do {
+  while (!status && retry) {
     Wire.beginTransmission(addr);                       // start transmission to device
     Wire.write(reg);                                    // sends register address to read from
     if (0 == Wire.endTransmission(false)) {             // Try to become I2C Master, send data and collect bytes, keep master status for next request...
       Wire.requestFrom((int)addr, (int)size);           // send data n-bytes read
       if (Wire.available() == size) {
-        for (byte i = 0; i < size; i++) {
+        for (uint32_t i = 0; i < size; i++) {
           i2c_buffer = i2c_buffer << 8 | Wire.read();   // receive DATA
         }
+        status = true;
       }
     }
-    x--;
-  } while (Wire.endTransmission(true) != 0 && x != 0);  // end transmission
-  return (x);
+    retry--;
+  }
+  return status;
 }
 
 bool I2cValidRead8(uint8_t *data, uint8_t addr, uint8_t reg)
@@ -913,7 +1372,7 @@ int32_t I2cRead24(uint8_t addr, uint8_t reg)
 
 bool I2cWrite(uint8_t addr, uint8_t reg, uint32_t val, uint8_t size)
 {
-  byte x = I2C_RETRY_COUNTER;
+  uint8_t x = I2C_RETRY_COUNTER;
 
   do {
     Wire.beginTransmission((uint8_t)addr);              // start transmission to device
@@ -937,455 +1396,131 @@ bool I2cWrite16(uint8_t addr, uint8_t reg, uint16_t val)
    return I2cWrite(addr, reg, val, 2);
 }
 
+int8_t I2cReadBuffer(uint8_t addr, uint8_t reg, uint8_t *reg_data, uint16_t len)
+{
+  Wire.beginTransmission((uint8_t)addr);
+  Wire.write((uint8_t)reg);
+  Wire.endTransmission();
+  if (len != Wire.requestFrom((uint8_t)addr, (uint8_t)len)) {
+    return 1;
+  }
+  while (len--) {
+    *reg_data = (uint8_t)Wire.read();
+    reg_data++;
+  }
+  return 0;
+}
+
+int8_t I2cWriteBuffer(uint8_t addr, uint8_t reg, uint8_t *reg_data, uint16_t len)
+{
+  Wire.beginTransmission((uint8_t)addr);
+  Wire.write((uint8_t)reg);
+  while (len--) {
+    Wire.write(*reg_data);
+    reg_data++;
+  }
+  Wire.endTransmission();
+  return 0;
+}
+
 void I2cScan(char *devs, unsigned int devs_len)
 {
-  byte error;
-  byte address;
-  byte any = 0;
-  char tstr[10];
+  // Return error codes defined in twi.h and core_esp8266_si2c.c
+  // I2C_OK                      0
+  // I2C_SCL_HELD_LOW            1 = SCL held low by another device, no procedure available to recover
+  // I2C_SCL_HELD_LOW_AFTER_READ 2 = I2C bus error. SCL held low beyond slave clock stretch time
+  // I2C_SDA_HELD_LOW            3 = I2C bus error. SDA line held low by slave/another_master after n bits
+  // I2C_SDA_HELD_LOW_AFTER_INIT 4 = line busy. SDA again held low by another device. 2nd master?
+
+  uint8_t error = 0;
+  uint8_t address = 0;
+  uint8_t any = 0;
 
   snprintf_P(devs, devs_len, PSTR("{\"" D_CMND_I2CSCAN "\":\"" D_JSON_I2CSCAN_DEVICES_FOUND_AT));
   for (address = 1; address <= 127; address++) {
     Wire.beginTransmission(address);
     error = Wire.endTransmission();
     if (0 == error) {
-      snprintf_P(tstr, sizeof(tstr), PSTR(" 0x%2x"), address);
-      strncat(devs, tstr, devs_len);
       any = 1;
+      snprintf_P(devs, devs_len, PSTR("%s 0x%02x"), devs, address);
     }
-    else if (4 == error) {
-      snprintf_P(devs, devs_len, PSTR("{\"" D_CMND_I2CSCAN "\":\"" D_JSON_I2CSCAN_UNKNOWN_ERROR_AT " 0x%2x\"}"), address);
+    else if (error != 2) {  // Seems to happen anyway using this scan
+      any = 2;
+      snprintf_P(devs, devs_len, PSTR("{\"" D_CMND_I2CSCAN "\":\"Error %d at 0x%02x"), error, address);
+      break;
     }
   }
   if (any) {
-    strncat(devs, "\"}", devs_len);
-  } else {
+    strncat(devs, "\"}", devs_len - strlen(devs) -1);
+  }
+  else {
     snprintf_P(devs, devs_len, PSTR("{\"" D_CMND_I2CSCAN "\":\"" D_JSON_I2CSCAN_NO_DEVICES_FOUND "\"}"));
   }
 }
 
-boolean I2cDevice(byte addr)
+void I2cSetActive(uint32_t addr, uint32_t count = 1)
 {
-  for (byte address = 1; address <= 127; address++) {
-    Wire.beginTransmission(address);
-    if (!Wire.endTransmission() && (address == addr)) {
-      return true;
-    }
+  addr &= 0x7F;         // Max I2C address is 127
+  count &= 0x7F;        // Max 4 x 32 bits available
+  while (count-- && (addr < 128)) {
+    i2c_active[addr / 32] |= (1 << (addr % 32));
+    addr++;
+  }
+//  AddLog_P2(LOG_LEVEL_DEBUG, PSTR("I2C: Active %08X,%08X,%08X,%08X"), i2c_active[0], i2c_active[1], i2c_active[2], i2c_active[3]);
+}
+
+bool I2cActive(uint32_t addr)
+{
+  addr &= 0x7F;         // Max I2C address is 127
+  if (i2c_active[addr / 32] & (1 << (addr % 32))) {
+    return true;
   }
   return false;
 }
+
+bool I2cDevice(uint8_t addr)
+{
+  addr &= 0x7F;         // Max I2C address is 127
+  if (I2cActive(addr)) {
+    return false;       // If already active report as not present;
+  }
+  Wire.beginTransmission(addr);
+  return (0 == Wire.endTransmission());
+}
 #endif  // USE_I2C
-
-/*********************************************************************************************\
- * Real Time Clock
- *
- * Sources: Time by Michael Margolis and Paul Stoffregen (https://github.com/PaulStoffregen/Time)
- *          Timezone by Jack Christensen (https://github.com/JChristensen/Timezone)
-\*********************************************************************************************/
-
-extern "C" {
-#include "sntp.h"
-}
-
-#define SECS_PER_MIN  ((uint32_t)(60UL))
-#define SECS_PER_HOUR ((uint32_t)(3600UL))
-#define SECS_PER_DAY  ((uint32_t)(SECS_PER_HOUR * 24UL))
-#define LEAP_YEAR(Y)  (((1970+Y)>0) && !((1970+Y)%4) && (((1970+Y)%100) || !((1970+Y)%400)))
-
-Ticker TickerRtc;
-
-static const uint8_t kDaysInMonth[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 }; // API starts months from 1, this array starts from 0
-static const char kMonthNamesEnglish[] = "JanFebMarAprMayJunJulAugSepOctNovDec";
-
-uint32_t utc_time = 0;
-uint32_t local_time = 0;
-uint32_t daylight_saving_time = 0;
-uint32_t standard_time = 0;
-uint32_t ntp_time = 0;
-uint32_t midnight = 1451602800;
-uint32_t restart_time = 0;
-uint8_t  midnight_now = 0;
-uint8_t  ntp_sync_minute = 0;
-
-String GetBuildDateAndTime()
-{
-  // "2017-03-07T11:08:02" - ISO8601:2004
-  char bdt[21];
-  char *p;
-  char mdate[] = __DATE__;  // "Mar  7 2017"
-  char *smonth = mdate;
-  int day = 0;
-  int year = 0;
-
-  // sscanf(mdate, "%s %d %d", bdt, &day, &year);  // Not implemented in 2.3.0 and probably too much code
-  byte i = 0;
-  for (char *str = strtok_r(mdate, " ", &p); str && i < 3; str = strtok_r(NULL, " ", &p)) {
-    switch (i++) {
-    case 0:  // Month
-      smonth = str;
-      break;
-    case 1:  // Day
-      day = atoi(str);
-      break;
-    case 2:  // Year
-      year = atoi(str);
-    }
-  }
-  int month = (strstr(kMonthNamesEnglish, smonth) -kMonthNamesEnglish) /3 +1;
-  snprintf_P(bdt, sizeof(bdt), PSTR("%d" D_YEAR_MONTH_SEPARATOR "%02d" D_MONTH_DAY_SEPARATOR "%02d" D_DATE_TIME_SEPARATOR "%s"), year, month, day, __TIME__);
-  return String(bdt);
-}
-
-String GetDateAndTime(byte time_type)
-{
-  // enum GetDateAndTimeOptions { DT_LOCAL, DT_UTC, DT_RESTART, DT_UPTIME };
-  // "2017-03-07T11:08:02" - ISO8601:2004
-  char dt[21];
-  TIME_T tmpTime;
-
-  if (DT_UPTIME == time_type) {
-    if (restart_time) {
-      BreakTime(utc_time - restart_time, tmpTime);
-    } else {
-      BreakTime(uptime, tmpTime);
-    }
-    // "P128DT14H35M44S" - ISO8601:2004 - https://en.wikipedia.org/wiki/ISO_8601 Durations
-    // snprintf_P(dt, sizeof(dt), PSTR("P%dDT%02dH%02dM%02dS"), ut.days, ut.hour, ut.minute, ut.second);
-    // "128 14:35:44" - OpenVMS
-    // "128T14:35:44" - Tasmota
-    snprintf_P(dt, sizeof(dt), PSTR("%dT%02d:%02d:%02d"),
-      tmpTime.days, tmpTime.hour, tmpTime.minute, tmpTime.second);
-  } else {
-    switch (time_type) {
-      case DT_UTC:
-        BreakTime(utc_time, tmpTime);
-        tmpTime.year += 1970;
-        break;
-      case DT_RESTART:
-        if (restart_time == 0) {
-          return "";
-        }
-        BreakTime(restart_time, tmpTime);
-        tmpTime.year += 1970;
-        break;
-      default:
-        tmpTime = RtcTime;
-    }
-    snprintf_P(dt, sizeof(dt), PSTR("%04d-%02d-%02dT%02d:%02d:%02d"),
-      tmpTime.year, tmpTime.month, tmpTime.day_of_month, tmpTime.hour, tmpTime.minute, tmpTime.second);
-  }
-  return String(dt);
-}
-
-String GetUptime()
-{
-  char dt[16];
-
-  TIME_T ut;
-
-  if (restart_time) {
-    BreakTime(utc_time - restart_time, ut);
-  } else {
-    BreakTime(uptime, ut);
-  }
-
-  // "P128DT14H35M44S" - ISO8601:2004 - https://en.wikipedia.org/wiki/ISO_8601 Durations
-//  snprintf_P(dt, sizeof(dt), PSTR("P%dDT%02dH%02dM%02dS"), ut.days, ut.hour, ut.minute, ut.second);
-
-  // "128 14:35:44" - OpenVMS
-  // "128T14:35:44" - Tasmota
-  snprintf_P(dt, sizeof(dt), PSTR("%dT%02d:%02d:%02d"),
-    ut.days, ut.hour, ut.minute, ut.second);
-  return String(dt);
-}
-
-void BreakTime(uint32_t time_input, TIME_T &tm)
-{
-// break the given time_input into time components
-// this is a more compact version of the C library localtime function
-// note that year is offset from 1970 !!!
-
-  uint8_t year;
-  uint8_t month;
-  uint8_t month_length;
-  uint32_t time;
-  unsigned long days;
-
-  time = time_input;
-  tm.second = time % 60;
-  time /= 60;                // now it is minutes
-  tm.minute = time % 60;
-  time /= 60;                // now it is hours
-  tm.hour = time % 24;
-  time /= 24;                // now it is days
-  tm.days = time;
-  tm.day_of_week = ((time + 4) % 7) + 1;  // Sunday is day 1
-
-  year = 0;
-  days = 0;
-  while((unsigned)(days += (LEAP_YEAR(year) ? 366 : 365)) <= time) {
-    year++;
-  }
-  tm.year = year;            // year is offset from 1970
-
-  days -= LEAP_YEAR(year) ? 366 : 365;
-  time -= days;              // now it is days in this year, starting at 0
-  tm.day_of_year = time;
-
-  days = 0;
-  month = 0;
-  month_length = 0;
-  for (month = 0; month < 12; month++) {
-    if (1 == month) { // february
-      if (LEAP_YEAR(year)) {
-        month_length = 29;
-      } else {
-        month_length = 28;
-      }
-    } else {
-      month_length = kDaysInMonth[month];
-    }
-
-    if (time >= month_length) {
-      time -= month_length;
-    } else {
-      break;
-    }
-  }
-  strlcpy(tm.name_of_month, kMonthNames + (month *3), 4);
-  tm.month = month + 1;      // jan is month 1
-  tm.day_of_month = time + 1;         // day of month
-  tm.valid = (time_input > 1451602800);  // 2016-01-01
-}
-
-uint32_t MakeTime(TIME_T &tm)
-{
-// assemble time elements into time_t
-// note year argument is offset from 1970
-
-  int i;
-  uint32_t seconds;
-
-  // seconds from 1970 till 1 jan 00:00:00 of the given year
-  seconds = tm.year * (SECS_PER_DAY * 365);
-  for (i = 0; i < tm.year; i++) {
-    if (LEAP_YEAR(i)) {
-      seconds +=  SECS_PER_DAY;   // add extra days for leap years
-    }
-  }
-
-  // add days for this year, months start from 1
-  for (i = 1; i < tm.month; i++) {
-    if ((2 == i) && LEAP_YEAR(tm.year)) {
-      seconds += SECS_PER_DAY * 29;
-    } else {
-      seconds += SECS_PER_DAY * kDaysInMonth[i-1];  // monthDay array starts from 0
-    }
-  }
-  seconds+= (tm.day_of_month - 1) * SECS_PER_DAY;
-  seconds+= tm.hour * SECS_PER_HOUR;
-  seconds+= tm.minute * SECS_PER_MIN;
-  seconds+= tm.second;
-  return seconds;
-}
-
-uint32_t RuleToTime(TimeChangeRule r, int yr)
-{
-  TIME_T tm;
-  uint32_t t;
-  uint8_t m;
-  uint8_t w;                // temp copies of r.month and r.week
-
-  m = r.month;
-  w = r.week;
-  if (0 == w) {             // Last week = 0
-    if (++m > 12) {         // for "Last", go to the next month
-      m = 1;
-      yr++;
-    }
-    w = 1;                  // and treat as first week of next month, subtract 7 days later
-  }
-
-  tm.hour = r.hour;
-  tm.minute = 0;
-  tm.second = 0;
-  tm.day_of_month = 1;
-  tm.month = m;
-  tm.year = yr - 1970;
-  t = MakeTime(tm);         // First day of the month, or first day of next month for "Last" rules
-  BreakTime(t, tm);
-  t += (7 * (w - 1) + (r.dow - tm.day_of_week + 7) % 7) * SECS_PER_DAY;
-  if (0 == r.week) {
-    t -= 7 * SECS_PER_DAY;  // back up a week if this is a "Last" rule
-  }
-  return t;
-}
-
-String GetTime(int type)
-{
-  char stime[25];   // Skip newline
-
-  uint32_t time = utc_time;
-  if (1 == type) time = local_time;
-  if (2 == type) time = daylight_saving_time;
-  if (3 == type) time = standard_time;
-  snprintf_P(stime, sizeof(stime), sntp_get_real_time(time));
-  return String(stime);
-}
-
-uint32_t LocalTime()
-{
-  return local_time;
-}
-
-uint32_t Midnight()
-{
-  return midnight;
-}
-
-boolean MidnightNow()
-{
-  boolean mnflg = midnight_now;
-  if (mnflg) midnight_now = 0;
-  return mnflg;
-}
-
-void RtcSecond()
-{
-  uint32_t stdoffset;
-  uint32_t dstoffset;
-  TIME_T tmpTime;
-
-  if ((ntp_sync_minute > 59) && (RtcTime.minute > 2)) ntp_sync_minute = 1;                 // If sync prepare for a new cycle
-  uint8_t offset = (uptime < 30) ? RtcTime.second : (((ESP.getChipId() & 0xF) * 3) + 3) ;  // First try ASAP to sync. If fails try once every 60 seconds based on chip id
-  if ((WL_CONNECTED == WiFi.status()) && (offset == RtcTime.second) && ((RtcTime.year < 2016) || (ntp_sync_minute == RtcTime.minute))) {
-    ntp_time = sntp_get_current_timestamp();
-    if (ntp_time) {
-      utc_time = ntp_time;
-      ntp_sync_minute = 60;  // Sync so block further requests
-      if (restart_time == 0) {
-        restart_time = utc_time - uptime;  // save first ntp time as restart time
-      }
-      BreakTime(utc_time, tmpTime);
-      RtcTime.year = tmpTime.year + 1970;
-      daylight_saving_time = RuleToTime(DaylightSavingTime, RtcTime.year);
-      standard_time = RuleToTime(StandardTime, RtcTime.year);
-      snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_APPLICATION "(" D_UTC_TIME ") %s, (" D_DST_TIME ") %s, (" D_STD_TIME ") %s"),
-        GetTime(0).c_str(), GetTime(2).c_str(), GetTime(3).c_str());
-      AddLog(LOG_LEVEL_DEBUG);
-    } else {
-      ntp_sync_minute++;  // Try again in next minute
-    }
-  }
-  utc_time++;
-  local_time = utc_time;
-  if (local_time > 1451602800) {  // 2016-01-01
-    if (99 == Settings.timezone) {
-      if (DaylightSavingTime.hemis) {
-        dstoffset = StandardTime.offset * SECS_PER_MIN;  // Southern hemisphere
-        stdoffset = DaylightSavingTime.offset * SECS_PER_MIN;
-      } else {
-        dstoffset = DaylightSavingTime.offset * SECS_PER_MIN;  // Northern hemisphere
-        stdoffset = StandardTime.offset * SECS_PER_MIN;
-      }
-      if ((utc_time >= (daylight_saving_time - stdoffset)) && (utc_time < (standard_time - dstoffset))) {
-        local_time += dstoffset;  // Daylight Saving Time
-      } else {
-        local_time += stdoffset;  // Standard Time
-      }
-    } else {
-      local_time += Settings.timezone * SECS_PER_HOUR;
-    }
-  }
-  BreakTime(local_time, RtcTime);
-  if (!RtcTime.hour && !RtcTime.minute && !RtcTime.second && RtcTime.valid) {
-    midnight = local_time;
-    midnight_now = 1;
-  }
-  RtcTime.year += 1970;
-}
-
-void RtcInit()
-{
-  sntp_setservername(0, Settings.ntp_server[0]);
-  sntp_setservername(1, Settings.ntp_server[1]);
-  sntp_setservername(2, Settings.ntp_server[2]);
-  sntp_stop();
-  sntp_set_timezone(0);      // UTC time
-  sntp_init();
-  utc_time = 0;
-  BreakTime(utc_time, RtcTime);
-  TickerRtc.attach(1, RtcSecond);
-}
-
-#ifndef USE_ADC_VCC
-/*********************************************************************************************\
- * ADC support
-\*********************************************************************************************/
-
-void AdcShow(boolean json)
-{
-  uint16_t analog = 0;
-  for (byte i = 0; i < 32; i++) {
-    analog += analogRead(A0);
-    delay(1);
-  }
-  analog >>= 5;
-
-  if (json) {
-    snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s,\"" D_JSON_ANALOG_INPUT "0\":%d"), mqtt_data, analog);
-#ifdef USE_WEBSERVER
-  } else {
-    snprintf_P(mqtt_data, sizeof(mqtt_data), HTTP_SNS_ANALOG, mqtt_data, "", 0, analog);
-#endif  // USE_WEBSERVER
-  }
-}
-
-/*********************************************************************************************\
- * Interface
-\*********************************************************************************************/
-
-#define XSNS_02
-
-boolean Xsns02(byte function)
-{
-  boolean result = false;
-
-  if (pin[GPIO_ADC0] < 99) {
-    switch (function) {
-      case FUNC_JSON_APPEND:
-        AdcShow(1);
-        break;
-#ifdef USE_WEBSERVER
-      case FUNC_WEB_APPEND:
-        AdcShow(0);
-        break;
-#endif  // USE_WEBSERVER
-    }
-  }
-  return result;
-}
-#endif  // USE_ADC_VCC
 
 /*********************************************************************************************\
  * Syslog
  *
  * Example:
- *   snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_LOG "Any value %d"), value);
- *   AddLog(LOG_LEVEL_DEBUG);
+ *   AddLog_P2(LOG_LEVEL_DEBUG, PSTR(D_LOG_LOG "Any value %d"), value);
  *
 \*********************************************************************************************/
 
-#ifdef USE_WEBSERVER
-void GetLog(byte idx, char** entry_pp, size_t* len_p)
+void SetSeriallog(uint32_t loglevel)
 {
-  char* entry_p = NULL;
+  Settings.seriallog_level = loglevel;
+  seriallog_level = loglevel;
+  seriallog_timer = 0;
+}
+
+void SetSyslog(uint32_t loglevel)
+{
+  Settings.syslog_level = loglevel;
+  syslog_level = loglevel;
+  syslog_timer = 0;
+}
+
+#ifdef USE_WEBSERVER
+void GetLog(uint32_t idx, char** entry_pp, size_t* len_p)
+{
+  char* entry_p = nullptr;
   size_t len = 0;
 
   if (idx) {
     char* it = web_log;
     do {
-      byte cur_idx = *it;
+      uint32_t cur_idx = *it;
       it++;
       size_t tmp = strchrspn(it, '\1');
       tmp++;                             // Skip terminating '\1'
@@ -1402,13 +1537,14 @@ void GetLog(byte idx, char** entry_pp, size_t* len_p)
 }
 #endif  // USE_WEBSERVER
 
-void Syslog()
+void Syslog(void)
 {
   // Destroys log_data
   char syslog_preamble[64];  // Hostname + Id
 
-  if (syslog_host_hash != GetHash(Settings.syslog_host, strlen(Settings.syslog_host))) {
-    syslog_host_hash = GetHash(Settings.syslog_host, strlen(Settings.syslog_host));
+  uint32_t current_hash = GetHash(Settings.syslog_host, strlen(Settings.syslog_host));
+  if (syslog_host_hash != current_hash) {
+    syslog_host_hash = current_hash;
     WiFi.hostByName(Settings.syslog_host, syslog_host_addr);  // If sleep enabled this might result in exception so try to do it once using hash
   }
   if (PortUdp.beginPacket(syslog_host_addr, Settings.syslog_port)) {
@@ -1416,29 +1552,30 @@ void Syslog()
     memmove(log_data + strlen(syslog_preamble), log_data, sizeof(log_data) - strlen(syslog_preamble));
     log_data[sizeof(log_data) -1] = '\0';
     memcpy(log_data, syslog_preamble, strlen(syslog_preamble));
-    PortUdp.write(log_data);
+    PortUdp.write(log_data, strlen(log_data));
     PortUdp.endPacket();
+    delay(1);  // Add time for UDP handling (#5512)
   } else {
     syslog_level = 0;
     syslog_timer = SYSLOG_TIMER;
-    snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_APPLICATION D_SYSLOG_HOST_NOT_FOUND ". " D_RETRY_IN " %d " D_UNIT_SECOND), SYSLOG_TIMER);
-    AddLog(LOG_LEVEL_INFO);
+    AddLog_P2(LOG_LEVEL_INFO, PSTR(D_LOG_APPLICATION D_SYSLOG_HOST_NOT_FOUND ". " D_RETRY_IN " %d " D_UNIT_SECOND), SYSLOG_TIMER);
   }
 }
 
-void AddLog(byte loglevel)
+void AddLog(uint32_t loglevel)
 {
   char mxtime[10];  // "13:45:21 "
 
   snprintf_P(mxtime, sizeof(mxtime), PSTR("%02d" D_HOUR_MINUTE_SEPARATOR "%02d" D_MINUTE_SECOND_SEPARATOR "%02d "), RtcTime.hour, RtcTime.minute, RtcTime.second);
 
   if (loglevel <= seriallog_level) {
-    Serial.printf("%s%s\n", mxtime, log_data);
+    Serial.printf("%s%s\r\n", mxtime, log_data);
   }
 #ifdef USE_WEBSERVER
   if (Settings.webserver && (loglevel <= Settings.weblog_level)) {
     // Delimited, zero-terminated buffer of log lines.
     // Each entry has this format: [index][log data]['\1']
+    web_log_index &= 0xFF;
     if (!web_log_index) web_log_index++;   // Index 0 is not allowed as it is the end of char string
     while (web_log_index == web_log[0] ||  // If log already holds the next index, remove it
            strlen(web_log) + strlen(log_data) + 13 > WEB_LOG_SIZE)  // 13 = web_log_index + mxtime + '\1' + '\0'
@@ -1450,44 +1587,74 @@ void AddLog(byte loglevel)
       memmove(web_log, it, WEB_LOG_SIZE -(it-web_log));  // Move buffer forward to remove oldest log line
     }
     snprintf_P(web_log, sizeof(web_log), PSTR("%s%c%s%s\1"), web_log, web_log_index++, mxtime, log_data);
+    web_log_index &= 0xFF;
     if (!web_log_index) web_log_index++;   // Index 0 is not allowed as it is the end of char string
   }
 #endif  // USE_WEBSERVER
-  if ((WL_CONNECTED == WiFi.status()) && (loglevel <= syslog_level)) {
-    Syslog();
-  }
+  if (!global_state.mqtt_down && (loglevel <= Settings.mqttlog_level)) { MqttPublishLogging(mxtime); }
+  if (!global_state.wifi_down && (loglevel <= syslog_level)) { Syslog(); }
 }
 
-void AddLog_P(byte loglevel, const char *formatP)
+void AddLog_P(uint32_t loglevel, const char *formatP)
 {
   snprintf_P(log_data, sizeof(log_data), formatP);
   AddLog(loglevel);
 }
 
-void AddLog_P(byte loglevel, const char *formatP, const char *formatP2)
+void AddLog_P(uint32_t loglevel, const char *formatP, const char *formatP2)
 {
-  char message[100];
+  char message[sizeof(log_data)];
 
   snprintf_P(log_data, sizeof(log_data), formatP);
   snprintf_P(message, sizeof(message), formatP2);
-  strncat(log_data, message, sizeof(log_data));
+  strncat(log_data, message, sizeof(log_data) - strlen(log_data) -1);
   AddLog(loglevel);
 }
 
-void AddLogSerial(byte loglevel, uint8_t *buffer, byte count)
+void AddLog_P2(uint32_t loglevel, PGM_P formatP, ...)
 {
-  snprintf_P(log_data, sizeof(log_data), PSTR(D_LOG_SERIAL D_RECEIVED));
-  for (byte i = 0; i < count; i++) {
+  va_list arg;
+  va_start(arg, formatP);
+  vsnprintf_P(log_data, sizeof(log_data), formatP, arg);
+  va_end(arg);
+
+  AddLog(loglevel);
+}
+
+void AddLog_Debug(PGM_P formatP, ...)
+{
+  va_list arg;
+  va_start(arg, formatP);
+  vsnprintf_P(log_data, sizeof(log_data), formatP, arg);
+  va_end(arg);
+
+  AddLog(LOG_LEVEL_DEBUG);
+}
+
+void AddLogBuffer(uint32_t loglevel, uint8_t *buffer, uint32_t count)
+{
+/*
+  snprintf_P(log_data, sizeof(log_data), PSTR("DMP:"));
+  for (uint32_t i = 0; i < count; i++) {
     snprintf_P(log_data, sizeof(log_data), PSTR("%s %02X"), log_data, *(buffer++));
   }
   AddLog(loglevel);
+*/
+/*
+  strcpy_P(log_data, PSTR("DMP: "));
+  ToHex_P(buffer, count, log_data + strlen(log_data), sizeof(log_data) - strlen(log_data), ' ');
+  AddLog(loglevel);
+*/
+  char hex_char[(count * 3) + 2];
+  AddLog_P2(loglevel, PSTR("DMP: %s"), ToHex_P(buffer, count, hex_char, sizeof(hex_char), ' '));
 }
 
-void AddLogSerial(byte loglevel)
+void AddLogSerial(uint32_t loglevel)
 {
-  AddLogSerial(loglevel, (uint8_t*)serial_in_buffer, serial_in_byte_counter);
+  AddLogBuffer(loglevel, (uint8_t*)serial_in_buffer, serial_in_byte_counter);
 }
 
-/*********************************************************************************************\
- *
-\*********************************************************************************************/
+void AddLogMissed(char *sensor, uint32_t misses)
+{
+  AddLog_P2(LOG_LEVEL_DEBUG, PSTR("SNS: %s missed %d"), sensor, SENSOR_MAX_MISS - misses);
+}

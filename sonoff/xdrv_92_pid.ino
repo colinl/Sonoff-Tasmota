@@ -124,7 +124,7 @@
 
 #ifdef USE_PID
 
-# include "PID.h"
+#include "PID.h"
 
 #define D_CMND_PID "pid_"
 
@@ -153,6 +153,8 @@ static int max_interval = PID_MAX_INTERVAL;
 static unsigned long last_pv_update_secs = 0;
 static boolean run_pid_now = false;     // tells PID_Every_Second to run the pid algorithm
 
+static long pid_current_time_secs = 0;  // a counter that counts seconds since initialisation
+
 void PID_Init()
 {
   snprintf_P(log_data, sizeof(log_data), "PID Init");
@@ -163,9 +165,10 @@ void PID_Init()
 
 void PID_Every_Second() {
   static int sec_counter = 0;
+  pid_current_time_secs++;    // increment time
   // run the pid algorithm if run_pid_now is true or if the right number of seconds has passed or if too long has
   // elapsed since last pv update. If too long has elapsed the the algorithm will deal with that.
-  if (run_pid_now  ||  utc_time - last_pv_update_secs > max_interval  ||  (update_secs != 0 && sec_counter++ % update_secs  ==  0)) {
+  if (run_pid_now  ||  pid_current_time_secs - last_pv_update_secs > max_interval  ||  (update_secs != 0 && sec_counter++ % update_secs  ==  0)) {
     run_pid();
     run_pid_now = false;
   }
@@ -188,7 +191,7 @@ void PID_Show_Sensor() {
       snprintf_P(log_data, sizeof(log_data), "PID_Show_Sensor: Temperature: %s", value);
       AddLog(LOG_LEVEL_INFO);
       // pass the value to the pid alogorithm to use as current pv
-      last_pv_update_secs = utc_time;
+      last_pv_update_secs = pid_current_time_secs;
       pid.setPv(atof(value), last_pv_update_secs);
       // also trigger running the pid algorithm if we have been told to run it each pv sample
       if (update_secs == 0) {
@@ -239,7 +242,7 @@ boolean PID_Command()
       case CMND_PID_SETPV:
         snprintf_P(log_data, sizeof(log_data), "PID command setpv");
         AddLog(LOG_LEVEL_INFO);
-        last_pv_update_secs = utc_time;
+        last_pv_update_secs = pid_current_time_secs;
         pid.setPv(atof(XdrvMailbox.data), last_pv_update_secs);
         // also trigger running the pid algorithm if we have been told to run it each pv sample
         if (update_secs == 0) {
@@ -327,7 +330,7 @@ boolean PID_Command()
 
 static void run_pid()
 {
-  double power = pid.tick(utc_time);
+  double power = pid.tick(pid_current_time_secs);
   char buf[10];
   dtostrfd(power, 3, buf);
   snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("{\"%s\":\"%s\"}"), "power", buf);
@@ -342,9 +345,10 @@ static void run_pid()
  * Interface
 \*********************************************************************************************/
 
-#define XDRV_92
+#define XDRV_92       92
 
 boolean Xdrv92(byte function)
+//boolean XDRV_92(byte function)
 {
   boolean result = false;
 
