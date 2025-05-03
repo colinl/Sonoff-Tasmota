@@ -48,7 +48,7 @@
 #ifdef CFG_HOLDER
 #undef CFG_HOLDER
 #endif
-#define CFG_HOLDER           0x25042800   // yymmddnn  change this to force changes to be used immediately
+#define CFG_HOLDER           0x25050300   // yymmddnn  change this to force changes to be used immediately
 
 #define USE_PID         // include the pid feature (+?k)
   #define PID_SETPOINT                  3.1     // setpoint
@@ -84,7 +84,7 @@
 #ifdef STA_SSID1
 #undef STA_SSID1
 #endif
-#define STA_SSID1            "pi005"
+#define STA_SSID1            "RK_tpl_01"
 
 #ifdef STA_PASS1
 #undef STA_PASS1
@@ -94,7 +94,7 @@
 #ifdef STA_SSID2
 #undef STA_SSID2
 #endif
-#define STA_SSID2            "RK_tpl_01"
+#define STA_SSID2            "RedKite"
 
 #ifdef STA_PASS2
 #undef STA_PASS2
